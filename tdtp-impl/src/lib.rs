@@ -1,4 +1,4 @@
-//! Implementation of the TDT protocol, as defined in [this specification](https://127.0.0.1).
+//! Implementation of the TDT protocol, as defined in the specification in the root of this crate.
 //!
 //! ## Features
 //!
