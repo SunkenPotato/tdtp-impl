@@ -7,7 +7,7 @@ use std::{
 use log::{info, trace, warn};
 
 use crate::{
-    consts::{EMP, SIG_PACKET},
+    consts::{CTRL, EMP, SIG_EXIT, SIG_PACKET},
     server::OutgoingDataPacket,
 };
 
@@ -52,9 +52,8 @@ pub(crate) fn data_handler(
 fn find_exit_sig(reader: &mut impl Read) -> io::Result<bool> {
     let mut buf = [0; 2];
     match reader.read(&mut buf) {
-        Ok(2) => Ok(true),
-        Ok(0) => Ok(false),
-        Ok(_) => panic!(),
+        Ok(2) if buf == [CTRL, SIG_EXIT] => Ok(true),
+        Ok(_) => Ok(false),
         Err(e) if e.kind() == ErrorKind::WouldBlock => Ok(false),
         Err(e) => Err(e),
     }

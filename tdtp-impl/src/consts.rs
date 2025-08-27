@@ -1,12 +1,13 @@
 //! Constants for the protocol.
 
 /// The control signal.
-#[deprecated]
 pub const CTRL: u8 = 0x11;
 /// The empty signal, indicating that the server does not have a packet to send.
 pub const EMP: u8 = 0x00;
 /// The packet signal, indicating that a packet follows.
 pub const SIG_PACKET: u8 = !EMP;
+/// The exit signal.
+pub const SIG_EXIT: u8 = 0x19;
 
 /// The connection data flag.
 pub const CONN_DATA: u8 = 0x01;
