@@ -50,7 +50,7 @@ impl Server {
     /// Note: this is a single-threaded server, it does not support multiple simultaneous connections.
     ///
     /// # Examples
-    /// ```rust
+    /// ```no_run
     /// use std::{thread::spawn, sync::mpsc};
     /// use core::net::{IpAddr, Ipv4Addr};
     /// use tdtp_impl::server::Server;

@@ -42,7 +42,7 @@ pub enum ChannelDataPacket {
 /// If the receiver has hung up, this function will attempt to terminate the connection and exit with `Ok(())`.
 ///
 /// # Example
-/// ```rs
+/// ```no_run
 /// use tdtp_impl::client::{ChannelDataPacket, data};
 /// use core::net::{IpAddr, Ipv4Addr};
 /// use std::{thread::spawn, sync::mpsc::channel};
