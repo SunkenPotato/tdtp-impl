@@ -2,7 +2,6 @@
 //!
 //! ## Features
 //!
-//!
 //! - `client`: Enables client-side functions and data types
 //! - `server`: Enables server-side functions and data types
 //! - `full`: Enables all of the above

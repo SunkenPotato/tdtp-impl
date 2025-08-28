@@ -8,6 +8,7 @@ client = []
 server = []
 full = ["client", "server"]
 default = ["full"]
+disable_log = ["log/release_max_level_off", "log/max_level_off"]
 
 [dependencies]
 log = "0.4.27"
