@@ -38,6 +38,8 @@ impl OutgoingDataPacket {
 }
 
 /// A server.
+///
+/// View [`Server::run`] on how to use this.
 pub struct Server;
 
 impl Server {
@@ -46,13 +48,28 @@ impl Server {
     /// The server will relay the packets sent over the given `supplier` to the connector.
     ///
     /// Note: this is a single-threaded server, it does not support multiple simultaneous connections.
-    pub fn run(sock_addr: (IpAddr, u16), supplier: Receiver<OutgoingDataPacket>) -> io::Result<!> {
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use std::{thread::spawn, sync::mpsc};
+    /// use core::net::{IpAddr, Ipv4Addr};
+    /// use tdtp_impl::server::Server;
+    ///
+    /// let (tx, rx) = mpsc::channel();
+    ///
+    /// let supplier_thread = spawn(move || loop {
+    ///     tx.send(todo!()); // send a packet to the server
+    /// });
+    ///
+    /// Server::run(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, rx).expect("an I/O error occurred");
+    /// ```
+    pub fn run(ip: IpAddr, port: u16, supplier: Receiver<OutgoingDataPacket>) -> io::Result<!> {
         info!("Starting listener");
-        let listener = TcpListener::bind(sock_addr)?;
+        let listener = TcpListener::bind((ip, port))?;
 
         info!(
             "Started listener at {}:{}, now listening for connections",
-            sock_addr.0, sock_addr.1
+            ip, port
         );
 
         while let Ok((conn, addr)) = listener.accept() {

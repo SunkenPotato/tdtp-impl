@@ -2,7 +2,6 @@
 //!
 //! ## Features
 //!
-//!
 //! - `client`: Enables client-side functions and data types
 //! - `server`: Enables server-side functions and data types
 //! - `full`: Enables all of the above
@@ -11,6 +10,8 @@
 
 #![feature(never_type)]
 #![forbid(missing_docs)]
+#![forbid(unsafe_code)]
+#![forbid(clippy::allow_attributes)]
 
 use std::{io, net::TcpStream};
 

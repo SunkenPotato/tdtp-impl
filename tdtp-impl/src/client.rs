@@ -40,13 +40,33 @@ pub enum ChannelDataPacket {
 /// Once a packet is received, this function will send it to the other end of the supplied `supplier`.
 ///
 /// If the receiver has hung up, this function will attempt to terminate the connection and exit with `Ok(())`.
-pub fn data(sock_addr: (IpAddr, u16), sender: Sender<ChannelDataPacket>) -> io::Result<()> {
+///
+/// # Example
+/// ```no_run
+/// use tdtp_impl::client::{ChannelDataPacket, data};
+/// use core::net::{IpAddr, Ipv4Addr};
+/// use std::{thread::spawn, sync::mpsc::channel};
+///
+/// let (tx, rx) = channel();
+///
+/// let consumer_thread = spawn(move || {
+///     while let Ok(packet) = rx.recv() {
+///         if let ChannelDataPacket::Packet(packet) = packet {
+///             println!("Got a packet: {packet:?}");
+///         }
+///     }
+/// });
+///
+/// data(
+///     IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+///     8000,
+///     tx
+/// );
+pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Result<()> {
     static TARGET: &str = "data_connection_client";
 
-    let ip = sock_addr.0;
-    let port = sock_addr.1;
     info!(target: TARGET, "Connecting to {}:{}", ip, port);
-    let mut stream = TcpStream::connect(sock_addr)?; // W
+    let mut stream = TcpStream::connect((ip, port))?; // W
     info!(target: TARGET, "Connected to {}:{}", ip, port);
     let mut reader = BufReader::new(stream.try_clone()?); // R
     trace!(target: TARGET, "Sending data signal");
