@@ -11,6 +11,8 @@
 
 #![feature(never_type)]
 #![forbid(missing_docs)]
+#![forbid(unsafe_code)]
+#![forbid(clippy::allow_attributes)]
 
 use std::{io, net::TcpStream};
 
