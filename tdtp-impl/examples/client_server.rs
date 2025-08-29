@@ -1,13 +1,14 @@
 use std::{
     error::Error,
     net::{IpAddr, Ipv4Addr},
-    sync::mpsc::{Receiver, Sender, channel},
+    sync::mpsc::{self, Sender},
     thread::spawn,
     time::SystemTime,
 };
 
 use tdtp_impl::{
-    client::{ChannelDataPacket, data},
+    Receiver, channel,
+    client::{IncomingDataPacket, data},
     server::{OutgoingDataPacket, Server},
 };
 
@@ -16,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // create a channel for the client and the package consumer to communicate
     let (client_tx, client_rx) = channel();
     // create a channel for the server and the package producer to communicate
-    let (server_tx, server_rx) = channel();
+    let (server_tx, server_rx) = mpsc::channel();
 
     // we're not going to actually use a thread here to constantly generate packages, instead
     // we'll produce them all before we start the server. since channels are buffered, they'll stay in memory until the server consumes them.
@@ -36,14 +37,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 // this will consume 512 packages and then exit, which will drop `rx`.
 // once `rx` is dropped, the client will terminate the connection with the server and return.
-fn package_consumer(rx: Receiver<ChannelDataPacket>) {
+fn package_consumer(rx: Receiver<IncomingDataPacket>) {
     let mut counter = 1;
     while counter <= 512
         && let Ok(packet) = rx.recv()
     {
-        if let ChannelDataPacket::Packet(_) = packet {
-            counter += 1;
-        }
+        println!("Got packet: {packet:?}");
+        counter += 1;
     }
 }
 

@@ -5,13 +5,13 @@
 use std::{
     io::{self, BufReader, Read, Write},
     net::{IpAddr, TcpStream},
-    sync::mpsc::{SendError, Sender},
+    sync::mpsc::SendError,
 };
 
 use log::{error, info, trace};
 
 use crate::{
-    close,
+    Sender, close,
     consts::{ConnectionType, EMP, SIG_EXIT, SIG_PACKET},
 };
 
@@ -23,23 +23,14 @@ pub struct IncomingDataPacket {
     pub time: u128,
 }
 
-/// A channel data packet.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ChannelDataPacket {
-    /// A ping packet.
-    ///
-    /// This exists to check whether the other side (the receiver) has hung up,
-    /// and therefore the client should disconnect from the server. If it is received, it should be ignored.
-    __Ping,
-    /// An actual packet.
-    Packet(IncomingDataPacket),
-}
-
 /// Initiate a data connection to the given address.
 ///
 /// Once a packet is received, this function will send it to the other end of the supplied `supplier`.
 ///
 /// If the receiver has hung up, this function will attempt to terminate the connection and exit with `Ok(())`.
+///
+/// The [`Sender`] requested by this function is not the [`std::sync::mpsc::Sender`]. It is a custom sender which allows this function to check
+/// if the other side has hung up.
 ///
 /// # Example
 /// ```no_run
@@ -62,7 +53,7 @@ pub enum ChannelDataPacket {
 ///     8000,
 ///     tx
 /// );
-pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Result<()> {
+pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Result<()> {
     info!("Connecting to {}:{}", ip, port);
     let mut stream = TcpStream::connect((ip, port))?; // W
     info!("Connected to {}:{}", ip, port);
@@ -74,10 +65,10 @@ pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Res
     let mut data = [0; 16];
 
     loop {
-        if sender.send(ChannelDataPacket::__Ping).is_err() {
-            trace!("Client packet receiver hung up, exiting");
-            break Ok(());
+        if !sender.has_receiver() {
+            return Ok(());
         }
+
         trace!("Reading signal");
         reader
             .read_exact(&mut sig)
@@ -105,11 +96,11 @@ pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Res
 /// Convert the given bytes into an [`IncomingDataPacket`] and send them via the sender.
 fn handle_packet(
     data: [u8; 16],
-    sender: &Sender<ChannelDataPacket>,
-) -> Result<(), SendError<ChannelDataPacket>> {
-    sender.send(ChannelDataPacket::Packet(IncomingDataPacket {
+    sender: &Sender<IncomingDataPacket>,
+) -> Result<(), SendError<IncomingDataPacket>> {
+    sender.send(IncomingDataPacket {
         time: u128::from_le_bytes(data),
-    }))
+    })
 }
 
 // synchronisation:
