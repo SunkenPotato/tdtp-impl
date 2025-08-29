@@ -28,6 +28,7 @@ pub struct OutgoingDataPacket {
 }
 
 impl OutgoingDataPacket {
+    /// Converts `self` into a little-endian encoded `u128` integer, which represents the microseconds since the unix epoch.
     fn as_bytes(self) -> [u8; 16] {
         self.time
             .duration_since(UNIX_EPOCH)
@@ -87,6 +88,9 @@ impl Server {
     }
 }
 
+/// Route the incoming connection to a handler.
+///
+/// Currently, this has only one handler registered.
 fn router(
     mut stream: TcpStream,
     addr: SocketAddr,

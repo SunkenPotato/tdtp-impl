@@ -5,7 +5,7 @@
 use std::{
     io::{self, BufReader, Read, Write},
     net::{IpAddr, TcpStream},
-    sync::mpsc::Sender,
+    sync::mpsc::{SendError, Sender},
 };
 
 use log::{info, trace};
@@ -87,7 +87,7 @@ pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Res
             EMP => continue,
             SIG_PACKET => {
                 reader.read_exact(&mut data)?;
-                if handle_packet(data, &sender) {
+                if handle_packet(data, &sender).is_err() {
                     trace!("Client packet receiver hung up, exiting");
                     break close(stream);
                 }
@@ -99,12 +99,14 @@ pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Res
     }
 }
 
-fn handle_packet(data: [u8; 16], sender: &Sender<ChannelDataPacket>) -> bool {
-    sender
-        .send(ChannelDataPacket::Packet(IncomingDataPacket {
-            time: u128::from_le_bytes(data),
-        }))
-        .is_err()
+/// Convert the given bytes into an [`IncomingDataPacket`] and send them via the sender.
+fn handle_packet(
+    data: [u8; 16],
+    sender: &Sender<ChannelDataPacket>,
+) -> Result<(), SendError<ChannelDataPacket>> {
+    sender.send(ChannelDataPacket::Packet(IncomingDataPacket {
+        time: u128::from_le_bytes(data),
+    }))
 }
 
 // synchronisation:

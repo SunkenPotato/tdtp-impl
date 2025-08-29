@@ -1,3 +1,5 @@
+//! Handler for the data connection.
+
 use std::{
     io::{self, BufReader, ErrorKind, Read, Write},
     net::{SocketAddr, TcpStream},
@@ -11,6 +13,7 @@ use crate::{
     server::OutgoingDataPacket,
 };
 
+/// The handler for the [`CONN_DATA`] connection.
 pub(crate) fn data_handler(
     stream: &mut TcpStream,
     addr: SocketAddr,
@@ -49,6 +52,8 @@ pub(crate) fn data_handler(
     }
 }
 
+/// Try to read an exit signal from the given stream. If a signal is found, this will return `Ok(true)`.
+/// If not, it will return `Ok(false)`.
 fn find_exit_sig(reader: &mut impl Read) -> io::Result<bool> {
     let mut buf = [0; 2];
     match reader.read(&mut buf) {
@@ -59,10 +64,12 @@ fn find_exit_sig(reader: &mut impl Read) -> io::Result<bool> {
     }
 }
 
-fn write_nothing(stream: &mut impl Write) -> io::Result<()> {
-    stream.write_all(&[EMP])
+/// Write the [`EMP`] byte to this sink. Convenience function.
+fn write_nothing(sink: &mut impl Write) -> io::Result<()> {
+    sink.write_all(&[EMP])
 }
 
+/// Write the given packet into this sink.
 fn write_packet(packet: OutgoingDataPacket, sink: &mut impl Write) -> io::Result<()> {
     let mut data = [SIG_PACKET; 17];
     let bytes = packet.as_bytes();
