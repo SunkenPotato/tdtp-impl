@@ -8,11 +8,11 @@ use std::{
     sync::mpsc::{SendError, Sender},
 };
 
-use log::{info, trace};
+use log::{error, info, trace};
 
 use crate::{
     close,
-    consts::{ConnectionType, EMP, SIG_PACKET},
+    consts::{ConnectionType, EMP, SIG_EXIT, SIG_PACKET},
 };
 
 /// An incoming data packet, sent over a channel to be processed.
@@ -30,7 +30,7 @@ pub enum ChannelDataPacket {
     ///
     /// This exists to check whether the other side (the receiver) has hung up,
     /// and therefore the client should disconnect from the server. If it is received, it should be ignored.
-    Ping,
+    __Ping,
     /// An actual packet.
     Packet(IncomingDataPacket),
 }
@@ -63,36 +63,39 @@ pub enum ChannelDataPacket {
 ///     tx
 /// );
 pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Result<()> {
-    static TARGET: &str = "data_connection_client";
-
-    info!(target: TARGET, "Connecting to {}:{}", ip, port);
+    info!("Connecting to {}:{}", ip, port);
     let mut stream = TcpStream::connect((ip, port))?; // W
-    info!(target: TARGET, "Connected to {}:{}", ip, port);
+    info!("Connected to {}:{}", ip, port);
     let mut reader = BufReader::new(stream.try_clone()?); // R
-    trace!(target: TARGET, "Sending data signal");
+    trace!("Sending data signal");
     stream.write_all(&[ConnectionType::Data as u8])?;
 
     let mut sig = [0xCE]; // some unused signal
     let mut data = [0; 16];
-    let mut ctr = 1;
 
     loop {
-        reader.read_exact(&mut sig)?;
-        if sender.send(ChannelDataPacket::Ping).is_err() {
+        if sender.send(ChannelDataPacket::__Ping).is_err() {
             trace!("Client packet receiver hung up, exiting");
             break Ok(());
         }
+        trace!("Reading signal");
+        reader
+            .read_exact(&mut sig)
+            .inspect_err(|v| error!("Failed to read signal: {v}"))?;
 
         match sig[0] {
             EMP => continue,
             SIG_PACKET => {
+                trace!("Reading data");
                 reader.read_exact(&mut data)?;
                 if handle_packet(data, &sender).is_err() {
                     trace!("Client packet receiver hung up, exiting");
                     break close(stream);
                 }
-                trace!("Client received {ctr}th packet");
-                ctr += 1;
+            }
+            SIG_EXIT => {
+                info!("Server terminated connection, exiting");
+                break Ok(());
             }
             _ => todo!(),
         }

@@ -10,7 +10,7 @@ use log::{info, trace, warn};
 
 use crate::{
     consts::{CTRL, EMP, SIG_EXIT, SIG_PACKET},
-    server::OutgoingDataPacket,
+    server::{OutgoingDataPacket, ServerError},
 };
 
 /// The handler for the [`CONN_DATA`] connection.
@@ -18,15 +18,13 @@ pub(crate) fn data_handler(
     stream: &mut TcpStream,
     addr: SocketAddr,
     supplier: &Receiver<OutgoingDataPacket>,
-) -> io::Result<()> {
+) -> Result<(), ServerError> {
     info!("Data connection with {addr} established");
 
     // we do not want to block, since the client may not send anything at all (see find_exit_sig)
     stream.set_nonblocking(true)?;
     let mut writer = stream.try_clone()?;
     let mut reader = BufReader::new(&*stream);
-
-    let mut ctr = 1;
 
     loop {
         if find_exit_sig(&mut reader)? {
@@ -37,7 +35,7 @@ pub(crate) fn data_handler(
         let packet = match supplier.try_recv() {
             Err(TryRecvError::Disconnected) => {
                 warn!("Data packet supplier hung up, terminating connection with client");
-                break Ok(());
+                break Err(ServerError::ChannelTermination);
             }
             Err(TryRecvError::Empty) => {
                 write_nothing(&mut writer)?;
@@ -47,8 +45,6 @@ pub(crate) fn data_handler(
         };
 
         write_packet(packet, &mut writer)?;
-        trace!("Sent {ctr}th packet");
-        ctr += 1;
     }
 }
 

@@ -5,6 +5,7 @@
 mod data;
 
 use std::{
+    fmt::Display,
     io::{self, Read},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream},
     sync::mpsc::Receiver,
@@ -43,10 +44,35 @@ impl OutgoingDataPacket {
 /// View [`Server::run`] on how to use this.
 pub struct Server;
 
+/// A server error.
+#[derive(Debug)]
+pub enum ServerError {
+    /// An I/O error was encountered.
+    IoError(io::Error),
+    /// The supplier hung up.
+    ChannelTermination,
+}
+
+impl Display for ServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IoError(e) => write!(f, "{e}"),
+            Self::ChannelTermination => write!(f, "Channel disconnected"),
+        }
+    }
+}
+
+impl From<io::Error> for ServerError {
+    fn from(value: io::Error) -> Self {
+        Self::IoError(value)
+    }
+}
+
 impl Server {
     /// Listen for a connection at the given address.
     ///
     /// The server will relay the packets sent over the given `supplier` to the connector.
+    /// If `supplier` hangs up, the server will exit with `Err(ServerError::ChannelTermination)`.
     ///
     /// Note: this is a single-threaded server, it does not support multiple simultaneous connections.
     ///
@@ -64,7 +90,11 @@ impl Server {
     ///
     /// Server::run(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, rx).expect("an I/O error occurred");
     /// ```
-    pub fn run(ip: IpAddr, port: u16, supplier: Receiver<OutgoingDataPacket>) -> io::Result<!> {
+    pub fn run(
+        ip: IpAddr,
+        port: u16,
+        supplier: Receiver<OutgoingDataPacket>,
+    ) -> Result<!, ServerError> {
         info!("Starting listener");
         let listener = TcpListener::bind((ip, port))?;
 
@@ -78,8 +108,10 @@ impl Server {
 
             match router(conn, addr, &supplier) {
                 Ok(_) => info!("Closed connection to {addr}"),
+                Err(e @ ServerError::ChannelTermination) => return Err(e),
                 Err(e) => {
-                    error!("{addr} handler encoutered an I/O error: {e}");
+                    error!("{addr} handler encoutered an error: {e}");
+                    return Err(e);
                 }
             }
         }
@@ -95,7 +127,7 @@ fn router(
     mut stream: TcpStream,
     addr: SocketAddr,
     supplier: &Receiver<OutgoingDataPacket>,
-) -> io::Result<()> {
+) -> Result<(), ServerError> {
     let mut conn_ty = [0; 1];
 
     stream.read_exact(&mut conn_ty)?;
@@ -111,10 +143,15 @@ fn router(
         Ok(_) => {
             debug!("Writing transmission delimiter to connection");
         }
-        Err(e) => {
+        Err(e @ ServerError::ChannelTermination) => {
+            close(stream)?;
+            return Err(e);
+        }
+        Err(e @ ServerError::IoError(_)) => {
             error!("Service encountered an I/O error: {e}");
+            return Err(e);
         }
     };
 
-    close(stream)
+    Ok(close(stream)?)
 }
