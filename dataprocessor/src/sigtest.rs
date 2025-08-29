@@ -63,11 +63,3 @@ pub fn significant_difference(x: &[f64], y: &[f64], alpha: f64) -> bool {
     p_f < alpha || p_t < alpha
 }
 
-///Beispielverwendung
-fn main() {
-    let data1 = vec![1.0, 2.0, 2.1, 1.9, 2.2];
-    let data2 = vec![3.0, 3.1, 3.2, 2.9, 3.3];
-
-    let sig = significant_difference(&data1, &data2, 0.05);
-    println!("Signifikanter Unterschied? {}", sig);
-}
