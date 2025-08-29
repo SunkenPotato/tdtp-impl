@@ -76,6 +76,9 @@ impl Server {
     ///
     /// Note: this is a single-threaded server, it does not support multiple simultaneous connections.
     ///
+    /// # Errors
+    /// Returns either an I/O error or an error indicating that the receiver to the supplied sender hung up.
+    ///
     /// # Examples
     /// ```no_run
     /// use std::{thread::spawn, sync::mpsc};
@@ -90,6 +93,7 @@ impl Server {
     ///
     /// Server::run(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, rx).expect("an I/O error occurred");
     /// ```
+    #[expect(clippy::needless_pass_by_value)]
     pub fn run(
         ip: IpAddr,
         port: u16,
@@ -98,16 +102,13 @@ impl Server {
         info!("Starting listener");
         let listener = TcpListener::bind((ip, port))?;
 
-        info!(
-            "Started listener at {}:{}, now listening for connections",
-            ip, port
-        );
+        info!("Started listener at {ip}:{port}, now listening for connections",);
 
         while let Ok((conn, addr)) = listener.accept() {
             info!("Received connection from {addr}");
 
             match router(conn, addr, &supplier) {
-                Ok(_) => info!("Closed connection to {addr}"),
+                Ok(()) => info!("Closed connection to {addr}"),
                 Err(e @ ServerError::ChannelTermination) => return Err(e),
                 Err(e) => {
                     error!("{addr} handler encoutered an error: {e}");
@@ -140,7 +141,7 @@ fn router(
     };
 
     match data_handler(&mut stream, addr, supplier) {
-        Ok(_) => {
+        Ok(()) => {
             debug!("Writing transmission delimiter to connection");
         }
         Err(e @ ServerError::ChannelTermination) => {
@@ -151,7 +152,7 @@ fn router(
             error!("Service encountered an I/O error: {e}");
             return Err(e);
         }
-    };
+    }
 
     Ok(close(stream)?)
 }

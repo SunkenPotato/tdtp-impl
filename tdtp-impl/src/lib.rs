@@ -13,6 +13,8 @@
 #![forbid(unsafe_code)]
 #![forbid(clippy::allow_attributes)]
 #![forbid(clippy::missing_docs_in_private_items)]
+#![forbid(unfulfilled_lint_expectations)]
+#![deny(clippy::pedantic)]
 
 use std::{
     io::{self, Write as _},
@@ -61,7 +63,7 @@ impl<T> DerefMut for Receiver<T> {
 
 impl<T> Drop for Receiver<T> {
     fn drop(&mut self) {
-        self.1.store(true, std::sync::atomic::Ordering::Relaxed)
+        self.1.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -90,6 +92,7 @@ impl<T> DerefMut for Sender<T> {
 }
 
 /// Create an MPSC channel for receiving and sending data.
+#[must_use]
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let (tx, rx) = mpsc::channel();
     let tx = Sender(tx, Arc::new(AtomicBool::new(false)));

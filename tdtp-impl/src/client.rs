@@ -32,6 +32,9 @@ pub struct IncomingDataPacket {
 /// The [`Sender`] requested by this function is not the [`std::sync::mpsc::Sender`]. It is a custom sender which allows this function to check
 /// if the other side has hung up.
 ///
+/// # Errors
+/// May return an I/O error.
+///
 /// # Example
 /// ```no_run
 /// use tdtp_impl::client::{ChannelDataPacket, data};
@@ -53,10 +56,12 @@ pub struct IncomingDataPacket {
 ///     8000,
 ///     tx
 /// );
+/// ```
+#[expect(clippy::needless_pass_by_value)]
 pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Result<()> {
-    info!("Connecting to {}:{}", ip, port);
+    info!("Connecting to {ip}:{port}");
     let mut stream = TcpStream::connect((ip, port))?; // W
-    info!("Connected to {}:{}", ip, port);
+    info!("Connected to {ip}:{port}");
     let mut reader = BufReader::new(stream.try_clone()?); // R
     trace!("Sending data signal");
     stream.write_all(&[ConnectionType::Data as u8])?;
@@ -75,7 +80,7 @@ pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Re
             .inspect_err(|v| error!("Failed to read signal: {v}"))?;
 
         match sig[0] {
-            EMP => continue,
+            EMP => (),
             SIG_PACKET => {
                 trace!("Reading data");
                 reader.read_exact(&mut data)?;
