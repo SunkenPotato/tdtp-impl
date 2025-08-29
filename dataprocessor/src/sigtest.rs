@@ -1,3 +1,4 @@
+
 use statrs::distribution::{FisherSnedecor, StudentsT, ContinuousCDF};
 
 /// Mittelwert berechnen
@@ -54,7 +55,12 @@ fn t_test(x: &[f64], y: &[f64], equal_var: bool) -> f64 {
     2.0 * (1.0 - t_dist.cdf(t_stat.abs()))
 }
 
-/// Hauptfunktion
+/// Bestimmt, ob sich zwei Datensätze signifikant voneinander unterscheiden
+/// # Argumente
+/// * `x`- Datenset 1
+/// * `y`- Datenset 2
+/// * `alpha` - Signifikanzniveau (Wahrscheinlichkeit, Nullhypothese fälschlicherweise abzulehnen)
+/// #### In unserem Fall bedeutet das, das wir keine neue Baseline erstellen müssen und die Daten annehmen oder eben nicht.
 pub fn significant_difference(x: &[f64], y: &[f64], alpha: f64) -> bool {
     let p_f = f_test(x, y);
     let equal_var = p_f > alpha;

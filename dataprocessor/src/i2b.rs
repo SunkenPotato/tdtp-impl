@@ -1,6 +1,6 @@
 use statrs::distribution::{ContinuousCDF, Normal};
 use std::f64;
-
+///
 pub struct BaselineBinner {
     baseline: Vec<f64>,
     num_bits: usize,
@@ -12,7 +12,7 @@ impl BaselineBinner {
         Self { baseline, num_bits }
     }
 
-    /// Gibt den Bin als Bits zurück, in dem der Wert `x` in einer Normalverteilung aus der Baseline wäre.
+    /// Gibt den Bin in einer Normalverteilung der Baseline eines Zeitintervalls `x` als Bits zurück.
     pub fn bin_as_bits(&self, x: f64) -> Option<Vec<bool>> {
         if self.baseline.is_empty() || self.num_bits == 0 || self.num_bits > usize::BITS as usize {
             return None;

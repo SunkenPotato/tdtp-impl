@@ -7,7 +7,7 @@
 ///
 /// # Rückgabe
 /// * `M_safe` - sichere maximale Anzahl von Bins (Quantile)
-fn max_safe_quantile_bins(mean_interval: f64, delta_t: f64, safety_factor: f64) -> u64 {
+pub fn max_safe_quantile_bins(mean_interval: f64, delta_t: f64, safety_factor: f64) -> u64 {
     let m_max = std::f64::consts::E * mean_interval / delta_t;
     let m_safe = m_max * safety_factor;
     m_safe.round() as u64
