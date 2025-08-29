@@ -6,7 +6,7 @@ use std::{
     sync::mpsc::{Receiver, TryRecvError},
 };
 
-use log::{info, trace, warn};
+use log::{info, warn};
 
 use crate::{
     consts::{CTRL, EMP, SIG_EXIT, SIG_PACKET},
