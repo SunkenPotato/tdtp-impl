@@ -1,50 +1,41 @@
 use std::{
     error::Error,
     net::{IpAddr, Ipv4Addr},
-    sync::{
-        Arc,
-        mpsc::{Receiver, Sender, channel},
-    },
+    sync::mpsc::{Receiver, Sender, channel},
     thread::spawn,
     time::SystemTime,
 };
 
-use simplelog::{Color, Config, ConfigBuilder, TermLogger};
 use tdtp_impl::{
     client::{ChannelDataPacket, data},
-    server::{OutgoingDataPacket, Server, ServerError},
+    server::{OutgoingDataPacket, Server},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    TermLogger::init(
-        log::LevelFilter::Debug,
-        ConfigBuilder::new()
-            .set_level_color(log::Level::Trace, Some(Color::Magenta))
-            .set_target_level(log::LevelFilter::Error)
-            .set_thread_level(log::LevelFilter::Error)
-            .build(),
-        simplelog::TerminalMode::Mixed,
-        simplelog::ColorChoice::Always,
-    )
-    .unwrap();
-
     let addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    // create a channel for the client and the package consumer to communicate
     let (client_tx, client_rx) = channel();
+    // create a channel for the server and the package producer to communicate
     let (server_tx, server_rx) = channel();
 
+    // we're not going to actually use a thread here to constantly generate packages, instead
+    // we'll produce them all before we start the server. since channels are buffered, they'll stay in memory until the server consumes them.
     produce_packages(server_tx);
+    // this thread will receive packages from the client...
     let consumer_thread = spawn(move || package_consumer(client_rx));
+    // and this one will be our server thread, running at 127.0.0.1:8000
     let server_thread = spawn(move || Server::run(addr, 8000, server_rx));
 
-    println!("a");
-    data(addr, 8000, client_tx).expect("oh no");
-    println!("b");
-    consumer_thread.join().unwrap();
-    println!("c");
+    // initiate the connection
+    data(addr, 8000, client_tx).expect("oh no, client error");
 
-    server_thread.join().unwrap().expect("oh no2")
+    // and then wait for the threads to finish
+    consumer_thread.join().unwrap();
+    server_thread.join().unwrap().expect("oh no, server error")
 }
 
+// this will consume 512 packages and then exit, which will drop `rx`.
+// once `rx` is dropped, the client will terminate the connection with the server and return.
 fn package_consumer(rx: Receiver<ChannelDataPacket>) {
     let mut counter = 1;
     while counter <= 512
@@ -56,9 +47,10 @@ fn package_consumer(rx: Receiver<ChannelDataPacket>) {
     }
 }
 
+/// produce 512 packages, each with the current time. even though `tx` is dropped here, since channels are buffered,
+/// when the server calls `Receiver::recv` on its end, it will still receive packages, regardless of the other side having hung up.
 fn produce_packages(tx: Sender<OutgoingDataPacket>) {
-    for i in 1..=512 {
-        // println!("{i}");
+    for _ in 1..=512 {
         tx.send(OutgoingDataPacket {
             time: SystemTime::now(),
         })

@@ -13,11 +13,11 @@ disable_log = ["log/release_max_level_off", "log/max_level_off"]
 [dependencies]
 log = "0.4.27"
 
-[dev-dependencies]
-simplelog = "0.12.2"
-
 [[example]]
 name = "server"
 
 [[example]]
 name = "client_server"
+
+[[example]]
+name = "client"
