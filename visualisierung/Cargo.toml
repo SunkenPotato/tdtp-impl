@@ -1,8 +1,0 @@
-[package]
-name = "visualisierung"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-eframe = "0.26"   # Aktuelle Version prüfen auf crates.io
-egui = "0.26"     # wird von eframe automatisch gezogen, aber explizit kann helfen
