@@ -5,14 +5,14 @@
 use std::{
     io::{self, BufReader, Read, Write},
     net::{IpAddr, TcpStream},
-    sync::mpsc::Sender,
+    sync::mpsc::SendError,
 };
 
-use log::{info, trace};
+use log::{error, info, trace};
 
 use crate::{
-    close,
-    consts::{ConnectionType, EMP, SIG_PACKET},
+    Sender, close,
+    consts::{ConnectionType, EMP, SIG_EXIT, SIG_PACKET},
 };
 
 /// An incoming data packet, sent over a channel to be processed.
@@ -23,23 +23,17 @@ pub struct IncomingDataPacket {
     pub time: u128,
 }
 
-/// A channel data packet.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ChannelDataPacket {
-    /// A ping packet.
-    ///
-    /// This exists to check whether the other side (the receiver) has hung up,
-    /// and therefore the client should disconnect from the server. If it is received, it should be ignored.
-    Ping,
-    /// An actual packet.
-    Packet(IncomingDataPacket),
-}
-
 /// Initiate a data connection to the given address.
 ///
 /// Once a packet is received, this function will send it to the other end of the supplied `supplier`.
 ///
 /// If the receiver has hung up, this function will attempt to terminate the connection and exit with `Ok(())`.
+///
+/// The [`Sender`] requested by this function is not the [`std::sync::mpsc::Sender`]. It is a custom sender which allows this function to check
+/// if the other side has hung up.
+///
+/// # Errors
+/// May return an I/O error.
 ///
 /// # Example
 /// ```no_run
@@ -62,49 +56,56 @@ pub enum ChannelDataPacket {
 ///     8000,
 ///     tx
 /// );
-pub fn data(ip: IpAddr, port: u16, sender: Sender<ChannelDataPacket>) -> io::Result<()> {
-    static TARGET: &str = "data_connection_client";
-
-    info!(target: TARGET, "Connecting to {}:{}", ip, port);
+/// ```
+#[expect(clippy::needless_pass_by_value)]
+pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Result<()> {
+    info!("Connecting to {ip}:{port}");
     let mut stream = TcpStream::connect((ip, port))?; // W
-    info!(target: TARGET, "Connected to {}:{}", ip, port);
+    info!("Connected to {ip}:{port}");
     let mut reader = BufReader::new(stream.try_clone()?); // R
-    trace!(target: TARGET, "Sending data signal");
+    trace!("Sending data signal");
     stream.write_all(&[ConnectionType::Data as u8])?;
 
     let mut sig = [0xCE]; // some unused signal
     let mut data = [0; 16];
-    let mut ctr = 1;
 
     loop {
-        reader.read_exact(&mut sig)?;
-        if sender.send(ChannelDataPacket::Ping).is_err() {
-            trace!("Client packet receiver hung up, exiting");
-            break Ok(());
+        if !sender.has_receiver() {
+            return Ok(());
         }
 
+        trace!("Reading signal");
+        reader
+            .read_exact(&mut sig)
+            .inspect_err(|v| error!("Failed to read signal: {v}"))?;
+
         match sig[0] {
-            EMP => continue,
+            EMP => (),
             SIG_PACKET => {
+                trace!("Reading data");
                 reader.read_exact(&mut data)?;
-                if handle_packet(data, &sender) {
+                if handle_packet(data, &sender).is_err() {
                     trace!("Client packet receiver hung up, exiting");
                     break close(stream);
                 }
-                trace!("Client received {ctr}th packet");
-                ctr += 1;
+            }
+            SIG_EXIT => {
+                info!("Server terminated connection, exiting");
+                break Ok(());
             }
             _ => todo!(),
         }
     }
 }
 
-fn handle_packet(data: [u8; 16], sender: &Sender<ChannelDataPacket>) -> bool {
-    sender
-        .send(ChannelDataPacket::Packet(IncomingDataPacket {
-            time: u128::from_le_bytes(data),
-        }))
-        .is_err()
+/// Convert the given bytes into an [`IncomingDataPacket`] and send them via the sender.
+fn handle_packet(
+    data: [u8; 16],
+    sender: &Sender<IncomingDataPacket>,
+) -> Result<(), SendError<IncomingDataPacket>> {
+    sender.send(IncomingDataPacket {
+        time: u128::from_le_bytes(data),
+    })
 }
 
 // synchronisation:
