@@ -22,3 +22,4 @@ Das Laborbuch dient als fortlaufende, detaillierte Dokumentation aller Arbeitssc
     ESP32 GND  ──┬─► GND (ST1167)
                 └─► GND (Geiger)
 
+
