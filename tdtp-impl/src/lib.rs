@@ -10,7 +10,9 @@
 
 #![feature(never_type)]
 #![forbid(missing_docs)]
-#![forbid(unsafe_code)]
+#![cfg_attr(not(feature = "interop"), forbid(unsafe_code))]
+// Relax it for external APIs
+#![cfg_attr(feature = "interop", deny(unsafe_code))]
 #![forbid(clippy::allow_attributes)]
 #![forbid(clippy::missing_docs_in_private_items)]
 #![forbid(unfulfilled_lint_expectations)]
@@ -21,9 +23,9 @@ use std::{
     net::TcpStream,
     ops::{Deref, DerefMut},
     sync::{
-        Arc,
         atomic::AtomicBool,
         mpsc::{self},
+        Arc,
     },
 };
 

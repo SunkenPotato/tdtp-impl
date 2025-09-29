@@ -15,7 +15,7 @@ fn main() {
     });
 
     // once `rx` is dropped, data will end the connection
-    data(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, tx).expect("oops, I/O error");
+    data(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, &tx).expect("oops, I/O error");
 }
 
 fn package_consumer(receiver: Receiver<IncomingDataPacket>) {

@@ -9,7 +9,7 @@ use std::{
 use tdtp_impl::{
     Receiver, channel,
     client::{IncomingDataPacket, data},
-    server::{OutgoingDataPacket, Server},
+    server::{OutgoingDataPacket, server},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -25,10 +25,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     // this thread will receive packages from the client...
     let consumer_thread = spawn(move || package_consumer(client_rx));
     // and this one will be our server thread, running at 127.0.0.1:8000
-    let server_thread = spawn(move || Server::run(addr, 8000, server_rx));
+    let server_thread = spawn(move || server(addr, 8000, &server_rx));
 
     // initiate the connection
-    data(addr, 8000, client_tx).expect("oh no, client error");
+    data(addr, 8000, &client_tx).expect("oh no, client error");
 
     // and then wait for the threads to finish
     consumer_thread.join().unwrap();

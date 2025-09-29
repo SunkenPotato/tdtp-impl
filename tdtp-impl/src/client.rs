@@ -57,8 +57,7 @@ pub struct IncomingDataPacket {
 ///     tx
 /// );
 /// ```
-#[expect(clippy::needless_pass_by_value)]
-pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Result<()> {
+pub fn data(ip: IpAddr, port: u16, sender: &Sender<IncomingDataPacket>) -> io::Result<()> {
     info!("Connecting to {ip}:{port}");
     let mut stream = TcpStream::connect((ip, port))?; // W
     info!("Connected to {ip}:{port}");
@@ -84,7 +83,7 @@ pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Re
             SIG_PACKET => {
                 trace!("Reading data");
                 reader.read_exact(&mut data)?;
-                if handle_packet(data, &sender).is_err() {
+                if handle_packet(data, sender).is_err() {
                     trace!("Client packet receiver hung up, exiting");
                     break close(stream);
                 }
@@ -106,6 +105,34 @@ fn handle_packet(
     sender.send(IncomingDataPacket {
         time: u128::from_le_bytes(data),
     })
+}
+
+/// A C-compatible wrapper for [`data`].
+///
+/// # Safety
+/// `sender` must be a valid pointer.
+#[cfg(feature = "interop")]
+#[expect(unsafe_code)]
+#[unsafe(no_mangle)]
+#[must_use]
+pub unsafe extern "C" fn c_data(
+    ip_a: u8,
+    ip_b: u8,
+    ip_c: u8,
+    ip_d: u8,
+    port: u16,
+    sender: *const Sender<IncomingDataPacket>,
+) -> i32 {
+    use std::net::Ipv4Addr;
+
+    match data(
+        IpAddr::V4(Ipv4Addr::new(ip_a, ip_b, ip_c, ip_d)),
+        port,
+        unsafe { &*sender },
+    ) {
+        Ok(()) => 0,
+        Err(e) => e.raw_os_error().unwrap_or(-1),
+    }
 }
 
 // synchronisation:
