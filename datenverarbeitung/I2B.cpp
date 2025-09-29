@@ -37,7 +37,7 @@ int I2B::take_intervall(float intervall) {
     if (i < baseline_len) {
         baseline.push_back(intervall);
         i++;
-        return 0;
+        return -1;
     } else {
         if (quantiles.empty()) bins_erstellen();
         bin_nummer = welcher_bin(intervall);
@@ -48,7 +48,7 @@ int I2B::take_intervall(float intervall) {
                 i = 0;
                 quantiles.clear();
                 intervalle.clear();
-                return 0;
+                return -1;
             }
         }
         return bin_nummer;
