@@ -5,6 +5,7 @@
 #include <numeric>
 #include <algorithm>
 using namespace std;
+#include <fstream>
 
 float randomFloat4dec(float min = 0.0f, float max = 10.0f) {
     static thread_local std::mt19937 gen(std::random_device{}()); // ein Generator, nicht bei jedem Aufruf neu seeden
@@ -17,7 +18,7 @@ class I2B {
     public:
         int i = 0; // Iterator für Länge der Baseline
         std::vector<float> baseline;
-        int baseline_len = 10000;
+        int baseline_len = 100;
         int max_bins;
         int bin_nummer;
         std::vector<double> quantiles;
@@ -68,10 +69,11 @@ void I2B::bins_erstellen() {
         quantiles[k-1] = -std::log(1.0 - p) / lambda_hat;
     }
 
-    // Optional: Kontrolle ausgeben
-    for (auto q : quantiles)
-        std::cout << q << " ";
-    std::cout << std::endl;
+     // Exportieren der Bins
+    std::ofstream file("bins.csv");
+    file << lambda_hat << "\n";
+    for(auto q : quantiles) file << q << "\n";
+    file.close();
 }
 
 int I2B::welcher_bin(float intervall) {
@@ -116,5 +118,3 @@ int main() {
         zufallszahlen.push_back(converter.take_intervall(intervall));
     }
 }
-
-
