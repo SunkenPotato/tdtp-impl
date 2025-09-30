@@ -32,7 +32,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // and then wait for the threads to finish
     consumer_thread.join().unwrap();
-    server_thread.join().unwrap().expect("oh no, server error")
+    server_thread.join().unwrap().expect("oh no, server error");
+    Ok(())
 }
 
 // this will consume 512 packages and then exit, which will drop `rx`.

@@ -9,7 +9,6 @@
 //!
 //! View the module-level docs for more information on usage.
 
-#![feature(never_type)]
 #![forbid(missing_docs)]
 #![cfg_attr(not(feature = "interop"), forbid(unsafe_code))]
 // Relax it for external APIs
