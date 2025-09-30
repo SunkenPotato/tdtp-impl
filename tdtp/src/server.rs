@@ -7,7 +7,6 @@ use std::{
     io::{self, BufReader, ErrorKind, Read, Write},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream},
     sync::mpsc::{Receiver, TryRecvError},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use log::{debug, error, info, warn};
@@ -18,28 +17,8 @@ use crate::{
 };
 
 /// An outgoing data packet, i.e., one which the server intends to send.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(transparent)]
-pub struct OutgoingDataPacket {
-    /// The system time associated with this packet.
-    pub time: SystemTime,
-}
-
-impl OutgoingDataPacket {
-    /// Converts `self` into a little-endian encoded `u128` integer, which represents the microseconds since the unix epoch.
-    fn as_bytes(self) -> [u8; 16] {
-        self.time
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_micros()
-            .to_le_bytes()
-    }
-}
-
-/// A server.
-///
-/// View [`Server::run`] on how to use this.
-pub struct Server;
+/// This must represent the amount of microseconds elapsed since the unix epoch.
+pub type OutgoingDataPacket = u128;
 
 /// A server error.
 #[derive(Debug)]
@@ -89,10 +68,11 @@ impl From<io::Error> for ServerError {
 ///
 /// Server::run(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, rx).expect("an I/O error occurred");
 /// ```
+#[expect(clippy::needless_pass_by_value)]
 pub fn server(
     ip: IpAddr,
     port: u16,
-    supplier: &Receiver<OutgoingDataPacket>,
+    supplier: Receiver<OutgoingDataPacket>,
 ) -> Result<!, ServerError> {
     info!("Starting listener");
     let listener = TcpListener::bind((ip, port))?;
@@ -102,7 +82,7 @@ pub fn server(
     while let Ok((conn, addr)) = listener.accept() {
         info!("Received connection from {addr}");
 
-        match router(conn, addr, supplier) {
+        match router(conn, addr, &supplier) {
             Ok(()) => info!("Closed connection to {addr}"),
             Err(e @ ServerError::ChannelTermination) => return Err(e),
             Err(e) => {
@@ -206,7 +186,7 @@ fn write_nothing(sink: &mut impl Write) -> io::Result<()> {
 /// Write the given packet into this sink.
 fn write_packet(packet: OutgoingDataPacket, sink: &mut impl Write) -> io::Result<()> {
     let mut data = [SIG_PACKET; 17];
-    let bytes = packet.as_bytes();
+    let bytes = packet.to_le_bytes();
     data[1..].copy_from_slice(&bytes);
     sink.write_all(&data)
 }
@@ -230,17 +210,60 @@ pub unsafe extern "C" fn c_server(
     ip_c: u8,
     ip_d: u8,
     port: u16,
-    receiver: *const Receiver<OutgoingDataPacket>,
+    receiver: *mut (),
 ) -> i32 {
     use std::net::Ipv4Addr;
 
     match server(
         IpAddr::V4(Ipv4Addr::new(ip_a, ip_b, ip_c, ip_d)),
         port,
-        unsafe { &*receiver },
+        unsafe { *Box::from_raw(receiver.cast::<Receiver<OutgoingDataPacket>>()) },
     ) {
         Ok(_) | Err(ServerError::ChannelTermination) => 0,
 
         Err(ServerError::IoError(io)) => io.raw_os_error().unwrap_or(-1),
     }
+}
+
+/// Create an MPSC channel for the server.
+///
+/// # Safety
+/// The sender must be correctly disposed of with [`c_free_server_sender`].
+#[cfg(feature = "interop")]
+#[expect(unsafe_code)]
+#[must_use]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn c_server_channel(buffer: usize) -> crate::ChannelPair {
+    let (tx, rx) = std::sync::mpsc::sync_channel::<OutgoingDataPacket>(buffer);
+    let tx = Box::into_raw(Box::new(tx)).cast();
+    let rx = Box::into_raw(Box::new(rx)).cast();
+
+    crate::ChannelPair { tx, rx }
+}
+
+/// Safely drop the passed sender.
+///
+/// # Safety
+/// `sender` must be a valid pointer.
+#[cfg(feature = "interop")]
+#[expect(unsafe_code)]
+pub unsafe extern "C" fn c_free_server_sender(sender: *mut ()) {
+    drop(unsafe { Box::from_raw(sender.cast::<std::sync::mpsc::Sender<OutgoingDataPacket>>()) });
+}
+
+/// Send the given packet over the supplied server sender.
+///
+/// # Safety
+/// `sender` must be a valid pointer.
+#[cfg(feature = "interop")]
+#[expect(unsafe_code)]
+#[unsafe(no_mangle)]
+#[must_use]
+pub unsafe extern "C" fn c_server_channel_send(
+    packet: OutgoingDataPacket,
+    sender: *const (),
+) -> bool {
+    let sender = unsafe { &*sender.cast::<std::sync::mpsc::Sender<OutgoingDataPacket>>() };
+
+    sender.send(packet).is_ok_and(|()| true)
 }
