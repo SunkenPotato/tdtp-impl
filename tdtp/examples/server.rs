@@ -8,7 +8,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use tdtp_impl::server::{OutgoingDataPacket, Server};
+use tdtp::server::{OutgoingDataPacket, server};
 
 fn main() {
     let (tx, rx) = channel();
@@ -17,7 +17,7 @@ fn main() {
     // which may not be something you want. an Arc will keep it alive for the duration of `main`.
     let _producer_thread = spawn(move || package_producer(Arc::clone(&arc)));
 
-    Server::run(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, rx).expect("oops, server error")
+    server(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, rx).expect("oops, server error")
 }
 
 fn package_producer(tx: Arc<Sender<OutgoingDataPacket>>) {
@@ -25,9 +25,12 @@ fn package_producer(tx: Arc<Sender<OutgoingDataPacket>>) {
     // such as when a particle is detected or every 5 seconds. you may also only want to send a certain amount of packets.
 
     for _ in 0..512 {
-        tx.send(OutgoingDataPacket {
-            time: SystemTime::now(),
-        })
+        tx.send(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
         .unwrap();
 
         std::thread::sleep(Duration::from_secs(5));

@@ -3,13 +3,13 @@ use std::{
     thread::spawn,
 };
 
-use tdtp_impl::{
-    Receiver, channel,
-    client::{IncomingDataPacket, data},
+use tdtp::{
+    client::data,
+    client_mpsc::{ClientReceiver, client_channel},
 };
 
 fn main() {
-    let (tx, rx) = channel();
+    let (tx, rx) = client_channel(8192);
     let _consumer_thread = spawn(|| {
         package_consumer(rx);
     });
@@ -18,7 +18,7 @@ fn main() {
     data(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8000, tx).expect("oops, I/O error");
 }
 
-fn package_consumer(receiver: Receiver<IncomingDataPacket>) {
+fn package_consumer(receiver: ClientReceiver) {
     let mut counter = 1;
 
     while counter <= 512
