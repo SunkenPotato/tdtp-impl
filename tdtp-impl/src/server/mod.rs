@@ -16,7 +16,7 @@ use log::{debug, error, info};
 
 use crate::{
     close,
-    consts::{CONN_DATA, ConnectionType},
+    consts::{ConnectionType, CONN_DATA},
     server::data::data_handler,
 };
 
@@ -47,7 +47,7 @@ pub struct Server;
 /// A server error.
 #[derive(Debug)]
 pub enum ServerError {
-    /// An I/O error was encountered.
+    /// An I/O error was enzählered.
     IoError(io::Error),
     /// The supplier hung up.
     ChannelTermination,
@@ -149,7 +149,7 @@ fn router(
             return Err(e);
         }
         Err(e @ ServerError::IoError(_)) => {
-            error!("Service encountered an I/O error: {e}");
+            error!("Service enzählered an I/O error: {e}");
             return Err(e);
         }
     }

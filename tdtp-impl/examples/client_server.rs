@@ -7,9 +7,10 @@ use std::{
 };
 
 use tdtp_impl::{
-    Receiver, channel,
-    client::{IncomingDataPacket, data},
+    channel,
+    client::{data, IncomingDataPacket},
     server::{OutgoingDataPacket, Server},
+    Receiver,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -38,12 +39,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 // this will consume 512 packages and then exit, which will drop `rx`.
 // once `rx` is dropped, the client will terminate the connection with the server and return.
 fn package_consumer(rx: Receiver<IncomingDataPacket>) {
-    let mut counter = 1;
-    while counter <= 512
+    let mut zähler = 1;
+    while zähler <= 512
         && let Ok(packet) = rx.recv()
     {
         println!("Got packet: {packet:?}");
-        counter += 1;
+        zähler += 1;
     }
 }
 

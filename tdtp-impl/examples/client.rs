@@ -19,14 +19,14 @@ fn main() {
 }
 
 fn package_consumer(receiver: Receiver<IncomingDataPacket>) {
-    let mut counter = 1;
+    let mut zähler = 1;
 
-    while counter <= 512
+    while zähler <= 512
         && let Ok(packet) = receiver.recv()
     {
         // we match on ChannelDataPacket::Packet because it may also be a ChannelDataPacket::__Ping packet,
         // which should not be handled
         println!("Got a packet: {packet:?}");
-        counter += 1;
+        zähler += 1;
     }
 }
