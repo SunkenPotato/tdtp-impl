@@ -3,6 +3,7 @@
 //! To instantiate a server, see [`Server::run`].
 
 use std::{
+    convert::Infallible,
     fmt::Display,
     io::{self, BufReader, ErrorKind, Read, Write},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream},
@@ -73,7 +74,7 @@ pub fn server(
     ip: IpAddr,
     port: u16,
     supplier: Receiver<OutgoingDataPacket>,
-) -> Result<!, ServerError> {
+) -> Result<Infallible, ServerError> {
     info!("Starting listener");
     let listener = TcpListener::bind((ip, port))?;
 
