@@ -7,7 +7,7 @@ void packet_producer(void *tx, int *result) {
     int count = 0;
 
     while (true) {
-        std::chrono::time_point now =  std::chrono::system_clock::now();
+        std::chrono::time_point now = std::chrono::system_clock::now();
         auto us = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
         unsigned __int128 ts = static_cast<unsigned __int128>(us);

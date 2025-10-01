@@ -4,6 +4,12 @@
 #include <cmath>
 #include <numeric>
 #include <algorithm>
+#include <thread>
+
+#include "libtdtp.h"
+
+#define MPSC_CHANNEL_SIZE 8192
+
 using namespace std;
 
 float randomFloat4dec(float min = 0.0f, float max = 10.0f) {
@@ -15,14 +21,14 @@ float randomFloat4dec(float min = 0.0f, float max = 10.0f) {
 
 class I2B {
     public:
+        std::vector<float> baseline = vector<float>();
+        std::vector<double> quantiles = vector<double>();
+        std::vector<float> intervalle = vector<float>();
+
         int i = 0; // Iterator für Länge der Baseline
-        std::vector<float> baseline;
         int baseline_len = 10000;
         int max_bins;
         int bin_nummer;
-        std::vector<double> quantiles;
-        std::vector<float> intervalle;
-
         int post_baseline_counter = 0;
 
         int take_intervall(float intervall);
@@ -56,7 +62,7 @@ int I2B::take_intervall(float intervall) {
 
 void I2B::bins_erstellen() {
     max_bins = round(sqrt(baseline_len));
-    
+
     // 1. Lambda aus Baseline schätzen
     double mean = std::accumulate(baseline.begin(), baseline.end(), 0.0) / baseline.size();
     double lambda_hat = 1.0 / mean;
@@ -104,17 +110,53 @@ bool I2B::sigtest() {
     double t = std::abs(mean_base - mean_interv) / std::sqrt(var_base / baseline.size() + var_interv / intervalle.size());
 
     const double t_crit = 2.58; // ungefähr 99% Konfidenz
-    cout<< (t > t_crit) << endl;
+    std::cout << (t > t_crit) << endl;
     return t > t_crit;
 }
 
+static I2B converter;
+
+void c_data_wrapper(int *result, uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint16_t port, void *tx) {
+    *result = c_data(a, b, c, d, port, tx);
+}
+
 int main() {
-    I2B converter;
+    converter = I2B();
     std::vector<int> zufallszahlen;
-    for(int i=0; i<=100000; i++) {
+
+    for(int i = 0; i <= 100000; i++) {
         float intervall = randomFloat4dec();
         zufallszahlen.push_back(converter.take_intervall(intervall));
     }
+
+    ChannelPair pair = c_client_channel(MPSC_CHANNEL_SIZE);
+    void *tx = pair.tx;
+    void *rx = pair.rx;
+
+    int data_result = 0;
+    std::thread client(c_data_wrapper, &data_result, 127, 0, 0, 1, 8888, tx);
+
+    for(int i = 0; i <= MPSC_CHANNEL_SIZE; i++) {
+        IncomingDataPacket out;
+        if (c_client_channel_recv(&out, rx) == 0) {
+            std::cerr << "got packet: " << i << std::endl;
+            // what the fuck am i supposed to do with a unsigned __int128 when the buffer is a vector<float>??
+            // TODO
+        } else {
+            std::cerr << "Server hung up, exiting" << std::endl;
+            break;
+        }
+    }
+
+    // free the receiver, since rust drop glue is not called
+    c_free_client_receiver(rx);
+
+    // try joining the thread, if not, exit since there's nothing we can do.
+    if (client.joinable()) client.join(); else { std::cerr << "Unable to join client, exiting" << std::endl; return 1; }
+
+    // check the result of the thread.
+    if (data_result != 0) {
+        std::cerr << "Data client returned an error: " << data_result << std::endl;
+        return 1;
+    }
 }
-
-
