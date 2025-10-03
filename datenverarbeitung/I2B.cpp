@@ -23,7 +23,7 @@ public:
 
     int post_vergleichsdaten_zähler = 0;
 
-    int take_intervall(int intervall);
+    int take_intervall(unsigned int intervall);
     void bins_erstellen();
     int welcher_bin(double intervall);
     bool sigtest();
@@ -35,7 +35,7 @@ public:
     }
 };
 
-int I2B::take_intervall(int intervall)
+int I2B::take_intervall(unsigned int intervall)
 {
     if (referenz_zähler_vergleichsdaten < vergleichsdaten_len)
     {
@@ -127,7 +127,7 @@ bool I2B::sigtest()
 int main()
 {
     I2B converter;
-    std::vector<int> intervalle = {12542, 87573, 90436, 87405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
+    std::vector<unsigned int> intervalle = {12542, 87573, 90436, 87405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
 
     for (int intervall : intervalle) {
         int bin = converter.take_intervall(intervall);
