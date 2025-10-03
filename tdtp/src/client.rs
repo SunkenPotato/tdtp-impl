@@ -11,17 +11,13 @@ use std::{
 use log::{error, info, trace};
 
 use crate::{
-    Sender, close,
+    client_mpsc, close,
     consts::{ConnectionType, EMP, SIG_EXIT, SIG_PACKET},
 };
 
 /// An incoming data packet, sent over a channel to be processed.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(transparent)]
-pub struct IncomingDataPacket {
-    /// The microseconds elapsed since the unix epoch when this was measured.
-    pub time: u128,
-}
+/// This must represent the amount of microseconds elapsed since the unix epoch.
+pub type IncomingDataPacket = u128;
 
 /// Initiate a data connection to the given address.
 ///
@@ -58,7 +54,7 @@ pub struct IncomingDataPacket {
 /// );
 /// ```
 #[expect(clippy::needless_pass_by_value)]
-pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Result<()> {
+pub fn data(ip: IpAddr, port: u16, sender: client_mpsc::ClientSender) -> io::Result<()> {
     info!("Connecting to {ip}:{port}");
     let mut stream = TcpStream::connect((ip, port))?; // W
     info!("Connected to {ip}:{port}");
@@ -101,11 +97,38 @@ pub fn data(ip: IpAddr, port: u16, sender: Sender<IncomingDataPacket>) -> io::Re
 /// Convert the given bytes into an [`IncomingDataPacket`] and send them via the sender.
 fn handle_packet(
     data: [u8; 16],
-    sender: &Sender<IncomingDataPacket>,
+    sender: &client_mpsc::ClientSender,
 ) -> Result<(), SendError<IncomingDataPacket>> {
-    sender.send(IncomingDataPacket {
-        time: u128::from_le_bytes(data),
-    })
+    sender.send(u128::from_le_bytes(data))
+}
+
+/// A C-compatible wrapper for [`data`].
+///
+/// # Safety
+/// `sender` must be a valid pointer.
+#[cfg(feature = "interop")]
+#[expect(unsafe_code)]
+#[unsafe(no_mangle)]
+#[must_use]
+pub unsafe extern "C" fn c_data(
+    ip_a: u8,
+    ip_b: u8,
+    ip_c: u8,
+    ip_d: u8,
+    port: u16,
+    sender: *mut (),
+) -> i32 {
+    use crate::client_mpsc::ClientSender;
+    use std::net::Ipv4Addr;
+
+    match data(
+        IpAddr::V4(Ipv4Addr::new(ip_a, ip_b, ip_c, ip_d)),
+        port,
+        unsafe { *Box::from_raw(sender.cast::<ClientSender>()) },
+    ) {
+        Ok(()) => 0,
+        Err(e) => e.raw_os_error().unwrap_or(-1),
+    }
 }
 
 // synchronisation:

@@ -3,20 +3,19 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     sync::mpsc::{self, Sender},
     thread::spawn,
-    time::SystemTime,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
-use tdtp_impl::{
-    channel,
-    client::{data, IncomingDataPacket},
-    server::{OutgoingDataPacket, Server},
-    Receiver,
+use tdtp::{
+    client::data,
+    client_mpsc::{ClientReceiver, client_channel},
+    server::{OutgoingDataPacket, server},
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
     let addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     // create a channel for the client and the package consumer to communicate
-    let (client_tx, client_rx) = channel();
+    let (client_tx, client_rx) = client_channel(8192);
     // create a channel for the server and the package producer to communicate
     let (server_tx, server_rx) = mpsc::channel();
 
@@ -26,25 +25,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     // this thread will receive packages from the client...
     let consumer_thread = spawn(move || package_consumer(client_rx));
     // and this one will be our server thread, running at 127.0.0.1:8000
-    let server_thread = spawn(move || Server::run(addr, 8000, server_rx));
+    let server_thread = spawn(move || server(addr, 8000, server_rx));
 
     // initiate the connection
     data(addr, 8000, client_tx).expect("oh no, client error");
 
     // and then wait for the threads to finish
     consumer_thread.join().unwrap();
-    server_thread.join().unwrap().expect("oh no, server error")
+    server_thread.join().unwrap().expect("oh no, server error");
+    Ok(())
 }
 
 // this will consume 512 packages and then exit, which will drop `rx`.
 // once `rx` is dropped, the client will terminate the connection with the server and return.
-fn package_consumer(rx: Receiver<IncomingDataPacket>) {
-    let mut zähler = 1;
-    while zähler <= 512
+fn package_consumer(rx: ClientReceiver) {
+    let mut counter = 1;
+    while counter <= 512
         && let Ok(packet) = rx.recv()
     {
         println!("Got packet: {packet:?}");
-        zähler += 1;
+        counter += 1;
     }
 }
 
@@ -52,9 +52,12 @@ fn package_consumer(rx: Receiver<IncomingDataPacket>) {
 /// when the server calls `Receiver::recv` on its end, it will still receive packages, regardless of the other side having hung up.
 fn produce_packages(tx: Sender<OutgoingDataPacket>) {
     for _ in 1..=512 {
-        tx.send(OutgoingDataPacket {
-            time: SystemTime::now(),
-        })
+        tx.send(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
         .unwrap()
     }
 }
