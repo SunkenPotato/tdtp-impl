@@ -5,13 +5,22 @@
 #include <numeric>
 #include <algorithm>
 using namespace std;
-#include <fstream>
-
 
 class I2B
 {
 public:
-    int bit_länge;
+    int take_intervall(unsigned int intervall);
+    I2B()
+    {
+        max_bins = static_cast<int>(std::round(std::sqrt(vergleichsdaten_len))); // Sonst könnte man zu viel Information extrahieren, die eventuell nicht mehr zufällig ist
+        quantile.reserve(max_bins);
+        vergleichsdaten.reserve(vergleichsdaten_len);
+        intervalle_post_vergleichsverteilung.reserve(vergleichsdaten_len * 2); 
+    }
+private: 
+    void bins_erstellen();
+    int welcher_bin(double intervall);
+    bool sigtest();
     const int NOT_READY = -1; // Wird zurückgegeben, wenn noch nicht genug Informationen da sind
     int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der vergleichsdaten
     std::vector<double> vergleichsdaten;
@@ -19,24 +28,14 @@ public:
     int max_bins;
     int bin_nummer;
     std::vector<double> quantile;
-    std::vector<double> intervalle;
-
+    std::vector<double> intervalle_post_vergleichsverteilung;
     int post_vergleichsdaten_zähler = 0;
-
-    int take_intervall(unsigned int intervall);
-    void bins_erstellen();
-    int welcher_bin(double intervall);
-    bool sigtest();
-
-    I2B()
-    {
-        max_bins = static_cast<int>(std::round(std::sqrt(vergleichsdaten_len))); // Sonst könnte man zu viel Information extrahieren, die eventuell nicht mehr zufällig ist
-        vergleichsdaten.reserve(vergleichsdaten_len);
-    }
 };
 
 int I2B::take_intervall(unsigned int intervall)
 {
+    cout << "take_intervall geöffnet" << endl;
+
     if (referenz_zähler_vergleichsdaten < vergleichsdaten_len)
     {
         vergleichsdaten.push_back(intervall);
@@ -45,7 +44,7 @@ int I2B::take_intervall(unsigned int intervall)
     }
     else
     {
-        intervalle.push_back(intervall);
+        intervalle_post_vergleichsverteilung.push_back(intervall);
         if (quantile.empty())
             bins_erstellen();
         bin_nummer = welcher_bin(intervall);
@@ -56,7 +55,7 @@ int I2B::take_intervall(unsigned int intervall)
             {
                 referenz_zähler_vergleichsdaten = 0;
                 quantile.clear();
-                intervalle.clear();
+                intervalle_post_vergleichsverteilung.clear();
                 vergleichsdaten.clear();
                 return NOT_READY;
             }
@@ -66,11 +65,13 @@ int I2B::take_intervall(unsigned int intervall)
     }
 }
 
-// Nimmt die Vergleichsdatebn, schätzt damit das Lamda, also die Zerfallsrate der Dichtefunktion
-// der Exponentialfunktion und teilt diese in "max_bins"
+// Nimmt die Vergleichsdaten, schätzt damit das Lamda, also die Zerfallsrate der Dichtefunktion
+// der Exponentialfunktion, und teilt diese in "max_bins"
 // quantile ein, die alle das Integral 1 / max_bins haben und speichert diese in dem Vektor "quantiles"
 void I2B::bins_erstellen()
 {
+    cout << "bins_erstellen geöffnet" << endl;
+
     // 1. Lambda aus vergleichsdaten schätzen
     double mean = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
     double lambda_hat = 1.0 / mean;
@@ -87,6 +88,8 @@ void I2B::bins_erstellen()
 
 int I2B::welcher_bin(double intervall)
 {
+    cout << "welcher_bin geöffnet" << endl;
+
     int index;
     if (intervall > quantile.back())
     {
@@ -103,8 +106,9 @@ int I2B::welcher_bin(double intervall)
 
 bool I2B::sigtest()
 {
+    cout << "sigtest geöffnet" << endl;
     double mean_base = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
-    double mean_interv = std::accumulate(intervalle.begin(), intervalle.end(), 0.0) / intervalle.size();
+    double mean_interv = std::accumulate(intervalle_post_vergleichsverteilung.begin(), intervalle_post_vergleichsverteilung.end(), 0.0) / intervalle_post_vergleichsverteilung.size();
 
     double var_base = 0.0;
     for (double x : vergleichsdaten)
@@ -112,14 +116,13 @@ bool I2B::sigtest()
     var_base /= (vergleichsdaten.size() - 1);
 
     double var_interv = 0.0;
-    for (double x : intervalle)
+    for (double x : intervalle_post_vergleichsverteilung)
         var_interv += (x - mean_interv) * (x - mean_interv);
-    var_interv /= (intervalle.size() - 1);
+    var_interv /= (intervalle_post_vergleichsverteilung.size() - 1);
 
-    double t = std::abs(mean_base - mean_interv) / std::sqrt(var_base / vergleichsdaten.size() + var_interv / intervalle.size());
+    double t = std::abs(mean_base - mean_interv) / std::sqrt(var_base / vergleichsdaten.size() + var_interv / intervalle_post_vergleichsverteilung.size());
 
     const double t_crit = 2.58; // ungefähr 99% Konfidenz
-    cout << (t > t_crit) << endl;
     return t > t_crit;
 }
 
