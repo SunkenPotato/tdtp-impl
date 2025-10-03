@@ -11,7 +11,7 @@ with open(filename, newline='') as csvfile:
     for row in reader:
         if row:  # Zeile ist nicht leer
             try:
-                data.append(float(row[0]))
+                data.append(double(row[0]))
             except ValueError:
                 continue
 

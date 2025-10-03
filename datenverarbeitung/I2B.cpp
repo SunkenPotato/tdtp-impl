@@ -7,119 +7,102 @@
 using namespace std;
 #include <fstream>
 
-float randomFloat(float min = 0.0f, float max = 10.0f) {
-    static thread_local std::mt19937 gen(std::random_device{}()); // ein Generator, nicht bei jedem Aufruf neu seeden
-    std::uniform_real_distribution<float> dist(min, max);
-    float r = dist(gen);
-    return std::round(r * 10000.0f) / 10000.0f;
-}
 
-std::string to_binary_fixed(uint64_t x, size_t bit_len) {
-    std::string out;
-    out.reserve(bit_len);
-
-    for (size_t i = 0; i < bit_len; ++i) {
-        size_t shift = bit_len - 1 - i;
-        out.push_back(((x >> shift) & 1ULL) ? '1' : '0');
-    }
-    return out;
-}
-
-class I2B {
+class I2B
+{
 public:
     int bit_länge;
-    I2B(int bit_länge) : bit_länge(bit_länge) {}
-    int i = 0; // Iterator für Länge der vergleichsdaten
-    std::vector<float> vergleichsdaten;
-    int vergleichsdaten_len = 100;
+    const int NOT_READY = -1; // Wird zurückgegeben, wenn noch nicht genug Informationen da sind
+    int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der vergleichsdaten
+    std::vector<double> vergleichsdaten;
+    int vergleichsdaten_len = 7; // Testwert, kann parametrisiert werden
     int max_bins;
     int bin_nummer;
-    std::vector<double> quantiles;
-    std::vector<float> intervalle;
+    std::vector<double> quantile;
+    std::vector<double> intervalle;
 
     int post_vergleichsdaten_zähler = 0;
 
-    int take_intervall(float intervall);
+    int take_intervall(int intervall);
     void bins_erstellen();
-    int welcher_bin(float intervall);
+    int welcher_bin(double intervall);
     bool sigtest();
+
+    I2B()
+    {
+        max_bins = static_cast<int>(std::round(std::sqrt(vergleichsdaten_len))); // Sonst könnte man zu viel Information extrahieren, die eventuell nicht mehr zufällig ist
+        vergleichsdaten.reserve(vergleichsdaten_len);
+    }
 };
 
-int I2B::take_intervall(float intervall) {
-    if (i < vergleichsdaten_len)
+int I2B::take_intervall(int intervall)
+{
+    if (referenz_zähler_vergleichsdaten < vergleichsdaten_len)
     {
         vergleichsdaten.push_back(intervall);
-        i++;
-        return -1;
+        referenz_zähler_vergleichsdaten++;
+        return NOT_READY;
     }
     else
     {
         intervalle.push_back(intervall);
-        if (quantiles.empty())
+        if (quantile.empty())
             bins_erstellen();
         bin_nummer = welcher_bin(intervall);
-        i++;
         post_vergleichsdaten_zähler++;
         if (post_vergleichsdaten_zähler % 10000 == 0)
         {
             if (sigtest())
             {
-                i = 0;
-                quantiles.clear();
+                referenz_zähler_vergleichsdaten = 0;
+                quantile.clear();
                 intervalle.clear();
                 vergleichsdaten.clear();
-                return -1;
+                return NOT_READY;
             }
         }
 
-        auto bits = to_binary_fixed(bin_nummer, bit_länge);
-        
-        return bits;
+        return bin_nummer;
     }
 }
 
-void I2B::bins_erstellen() {
-    max_bins = round(sqrt(vergleichsdaten_len));
-
+// Nimmt die Vergleichsdatebn, schätzt damit das Lamda, also die Zerfallsrate der Dichtefunktion
+// der Exponentialfunktion und teilt diese in "max_bins"
+// quantile ein, die alle das Integral 1 / max_bins haben und speichert diese in dem Vektor "quantiles"
+void I2B::bins_erstellen()
+{
     // 1. Lambda aus vergleichsdaten schätzen
     double mean = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
     double lambda_hat = 1.0 / mean;
 
     // 2. Quantile für gleichwahrscheinliche Bins
-    quantiles.resize(max_bins);
+    quantile.resize(max_bins);
     for (int k = 1; k <= max_bins; ++k)
     {
         double p = static_cast<double>(k) / max_bins; // p = k/n
-        quantiles[k - 1] = -std::log(1.0 - p) / lambda_hat;
+        quantile[k - 1] = -std::log(1.0 - p) / lambda_hat;
     }
 
-    // Exportieren der Bins
-    std::ofstream file("bins.csv");
-    file << lambda_hat << "\n";
-    for (auto q : quantiles)
-        file << q << "\n";
-    file.close();
 }
 
-int I2B::welcher_bin(float intervall) {
-    int num_bins = static_cast<int>(quantiles.size()) + 1;
-    int bits_needed = static_cast<int>(std::ceil(std::log2(num_bins)));
-
+int I2B::welcher_bin(double intervall)
+{
     int index;
-    if (intervall > quantiles.back())
+    if (intervall > quantile.back())
     {
-        index = num_bins - 1;
+        index = max_bins - 1;
     }
     else
     {
-        auto it = std::upper_bound(quantiles.begin(), quantiles.end(), intervall);
-        index = static_cast<int>(std::distance(quantiles.begin(), it));
+        auto it = std::upper_bound(quantile.begin(), quantile.end(), intervall);
+        index = static_cast<int>(std::distance(quantile.begin(), it));
     }
 
     return index;
 }
 
-bool I2B::sigtest() {
+bool I2B::sigtest()
+{
     double mean_base = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
     double mean_interv = std::accumulate(intervalle.begin(), intervalle.end(), 0.0) / intervalle.size();
 
@@ -140,17 +123,17 @@ bool I2B::sigtest() {
     return t > t_crit;
 }
 
-int main() {
-    cout << sizeof(5);
+// Testanwendung
+int main()
+{
     I2B converter;
-    std::vector<int> zufallszahlen;
-    for (int i = 0; i <= 100000; i++)
-    {
-        float intervall = randomFloat();
-        zufallszahlen.push_back(converter.take_intervall(intervall));
+    std::vector<int> intervalle = {12542, 87573, 90436, 87405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
+
+    for (int intervall : intervalle) {
+        int bin = converter.take_intervall(intervall);
+        cout << bin << endl;
     }
 }
-
 
 // TODO:
 // WIE SOLLEN DIE BITS ZURÜCKGEGEBEN WERDEN
