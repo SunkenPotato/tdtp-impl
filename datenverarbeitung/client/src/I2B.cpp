@@ -6,11 +6,11 @@
 #include <algorithm>
 using namespace std;
 
-class I2B
+class Intervall2Bin
 {
 public:
     int take_intervall(unsigned int intervall);
-    I2B()
+    Intervall2Bin()
     {
         // Anzahl der Bins, in die man die Exponentialverteilung einteilt
         max_bins = static_cast<int>(std::round(std::sqrt(vergleichsdaten_len))); // Sonst könnte man zu viel Information extrahieren, die eventuell nicht mehr zufällig ist
@@ -18,7 +18,7 @@ public:
         // Aus Effizienzgründen Speicher für die Vektoren reservieren.
         quantile.reserve(max_bins);
         vergleichsdaten.reserve(vergleichsdaten_len);
-        intervalle_post_vergleichsverteilung.reserve(vergleichsdaten_len * 2);  // Geschätzt, mehr macht keinen Sinn
+        intervalle_post_vergleichsverteilung.reserve(vergleichsdaten_len * 2); // Geschätzt, mehr macht keinen Sinn
     }
 
 private:
@@ -40,7 +40,7 @@ private:
 // lässt die Exponentialverteilung in gleichwahrscheinliche
 // Quantile einteilen und lässt prüfen, in welchem Quantil, also Bin, sich das Intervall, mit dem
 // diese Methode als letztes aufgerufen wurde, befindet und gibt die Nummer des Quantil zurück.
-int I2B::take_intervall(unsigned int intervall)
+int Intervall2Bin::take_intervall(unsigned int intervall)
 {
     // Überprüfen, ob nciht genug Vergleichsdaten vorhanden
     if (referenz_zähler_vergleichsdaten < vergleichsdaten_len)
@@ -86,7 +86,7 @@ int I2B::take_intervall(unsigned int intervall)
 // Nimmt die Vergleichsdaten, schätzt damit das Lamda, also die Zerfallsrate der Dichtefunktion
 // der Exponentialfunktion, und teilt diese in "max_bins"
 // quantile ein, die alle das Integral 1 / max_bins haben und speichert diese in dem Vektor "quantiles"
-void I2B::bins_erstellen()
+void Intervall2Bin::bins_erstellen()
 {
     // Lambda aus Vergleichsdaten schätzen
     double mean = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
@@ -102,7 +102,7 @@ void I2B::bins_erstellen()
 }
 
 // Prüft, in welchem Quantil sich ein Intervall befindet
-int I2B::welcher_bin(double intervall)
+int Intervall2Bin::welcher_bin(double intervall)
 {
     int index;
 
@@ -124,7 +124,7 @@ int I2B::welcher_bin(double intervall)
     return index;
 }
 
-bool I2B::t_test()
+bool Intervall2Bin::t_test()
 {
     // Berechnet die Mittelwerte der beiden Datensätze, also vergleichsdaten und intervalle_post_vergleichsverteilung
     double mean_base = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
@@ -153,7 +153,7 @@ bool I2B::t_test()
 // Testanwendung
 int main()
 {
-    I2B converter;
+    Intervall2Bin converter;
     std::vector<unsigned int> intervalle = {92542, 87573, 90436, 17405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
 
     for (int intervall : intervalle)
@@ -162,4 +162,3 @@ int main()
         cout << bin << endl;
     }
 }
-
