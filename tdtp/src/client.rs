@@ -17,7 +17,7 @@ use crate::{
 
 /// An incoming data packet, sent over a channel to be processed.
 /// This must represent the amount of microseconds elapsed since the unix epoch.
-pub type IncomingDataPacket = u128;
+pub type IncomingDataPacket = u64;
 
 /// Initiate a data connection to the given address.
 ///
@@ -63,11 +63,11 @@ pub fn data(ip: IpAddr, port: u16, sender: client_mpsc::ClientSender) -> io::Res
     stream.write_all(&[ConnectionType::Data as u8])?;
 
     let mut sig = [0xCE]; // some unused signal
-    let mut data = [0; 16];
+    let mut data = [0; const { size_of::<IncomingDataPacket>() }];
 
     loop {
         if !sender.has_receiver() {
-            return Ok(());
+            return stream.shutdown(std::net::Shutdown::Both);
         }
 
         trace!("Reading signal");
@@ -96,10 +96,10 @@ pub fn data(ip: IpAddr, port: u16, sender: client_mpsc::ClientSender) -> io::Res
 
 /// Convert the given bytes into an [`IncomingDataPacket`] and send them via the sender.
 fn handle_packet(
-    data: [u8; 16],
+    data: [u8; const { size_of::<IncomingDataPacket>() }],
     sender: &client_mpsc::ClientSender,
 ) -> Result<(), SendError<IncomingDataPacket>> {
-    sender.send(u128::from_le_bytes(data))
+    sender.send(IncomingDataPacket::from_le_bytes(data))
 }
 
 /// A C-compatible wrapper for [`data`].
@@ -130,36 +130,3 @@ pub unsafe extern "C" fn c_data(
         Err(e) => e.raw_os_error().unwrap_or(-1),
     }
 }
-
-// synchronisation:
-// what is our problem?
-// SystemTime may be too inaccurate, so we Instant instead, which, however,
-// is relative.
-// the packets sent will have a timestamp relative to one that both
-// server and client must agree on, a sort of "ground zero".
-// what do i want to do?
-// synchronise this "ground zero" timestamp between client and server
-
-// how do we do this?
-// 1. the server will send some sort of signal (0xAA as an ex) (S1).
-// once the client receives it, it should create an Instant at now (Instant A_C)
-// once the server has sent it, it should also create an Instant at now (Instant A_S)
-
-// 2. the client will send back a signal (0xAA) (S2)
-// once the client has sent it, it should create a duration measuring how long it
-// has been since A_C (D_C)
-// once the server has received it, it should create a duration measuring how long it
-// has been since A_S (D_S)
-
-// 3. server should send D_S to client
-// client should calc D_S - D_C and apply it to A_C, so:
-// A_C += D_S - D_C
-
-// diagram?
-//    C        S
-//    |Signal1 |
-// A_C|--->----|A_S
-//    |Signal2 |
-// B_C|---<----|B_S
-//    | D      |
-//    |---<----|

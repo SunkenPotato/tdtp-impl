@@ -4,8 +4,8 @@ CXXFLAGS := -Wall -Wextra -std=c++20 -pthread
 BIN  	  := bin
 SRC  	  := src
 EXEC 	  := main
-LIB       := lib
-INCLUDE   := include
+LIB       := ../lib
+INCLUDE   := ../include
 LIBRARIES := -lpigpio -lrt -ltdtp
 
 all: $(BIN)/$(EXEC)

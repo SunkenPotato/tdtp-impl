@@ -27,6 +27,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // and this one will be our server thread, running at 127.0.0.1:8000
     let server_thread = spawn(move || server(addr, 8000, server_rx));
 
+    // allow server to start up
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
     // initiate the connection
     data(addr, 8000, client_tx).expect("oh no, client error");
 
@@ -56,7 +59,9 @@ fn produce_packages(tx: Sender<OutgoingDataPacket>) {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_millis(),
+                .as_millis()
+                .try_into()
+                .unwrap(),
         )
         .unwrap()
     }

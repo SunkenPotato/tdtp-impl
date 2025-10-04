@@ -19,7 +19,7 @@ use crate::{
 
 /// An outgoing data packet, i.e., one which the server intends to send.
 /// This must represent the amount of microseconds elapsed since the unix epoch.
-pub type OutgoingDataPacket = u128;
+pub type OutgoingDataPacket = u64;
 
 /// A server error.
 #[derive(Debug)]
@@ -186,7 +186,9 @@ fn write_nothing(sink: &mut impl Write) -> io::Result<()> {
 
 /// Write the given packet into this sink.
 fn write_packet(packet: OutgoingDataPacket, sink: &mut impl Write) -> io::Result<()> {
-    let mut data = [SIG_PACKET; 17];
+    const ARR_DATA_SIZE: usize = 1 + size_of::<OutgoingDataPacket>();
+
+    let mut data = [SIG_PACKET; ARR_DATA_SIZE];
     let bytes = packet.to_le_bytes();
     data[1..].copy_from_slice(&bytes);
     sink.write_all(&data)
@@ -248,6 +250,7 @@ pub unsafe extern "C" fn c_server_channel(buffer: usize) -> crate::ChannelPair {
 /// `sender` must be a valid pointer.
 #[cfg(feature = "interop")]
 #[expect(unsafe_code)]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn c_free_server_sender(sender: *mut ()) {
     drop(unsafe { Box::from_raw(sender.cast::<std::sync::mpsc::Sender<OutgoingDataPacket>>()) });
 }
@@ -264,7 +267,7 @@ pub unsafe extern "C" fn c_server_channel_send(
     packet: OutgoingDataPacket,
     sender: *const (),
 ) -> bool {
-    let sender = unsafe { &*sender.cast::<std::sync::mpsc::Sender<OutgoingDataPacket>>() };
+    let sender = unsafe { &*sender.cast::<std::sync::mpsc::SyncSender<OutgoingDataPacket>>() };
 
     sender.send(packet).is_ok_and(|()| true)
 }
