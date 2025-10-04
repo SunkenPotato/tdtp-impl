@@ -22,7 +22,7 @@ private:
     int welcher_bin(double intervall);
     bool sigtest();
     const int NOT_READY = -1; // Wird zurückgegeben, wenn noch nicht genug Informationen da sind
-    int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der vergleichsdaten
+    int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der Vergleichsdaten
     std::vector<double> vergleichsdaten;
     int vergleichsdaten_len = 7; // Testwert, kann parametrisiert werden
     int max_bins;
@@ -32,10 +32,12 @@ private:
     int post_vergleichsdaten_zähler = 0;
 };
 
+// Nimmt Intervalle in Mikrosekunden, sammelt zunächst Vergleichsdaten,
+// lässt die Wahrscheinlichkeitsexponentialfunktion in gleichwahrscheinliche
+// Quantile einteilen und lässt prüfen, in welchem Quantil, also Bin, sich das Intervall, mit dem 
+// diese Methode als letztes aufgerufen wurde, befindet und gibt die Nummer des Quantil zurück.
 int I2B::take_intervall(unsigned int intervall)
 {
-    cout << "take_intervall geöffnet" << endl;
-
     if (referenz_zähler_vergleichsdaten < vergleichsdaten_len)
     {
         vergleichsdaten.push_back(intervall);
@@ -70,8 +72,6 @@ int I2B::take_intervall(unsigned int intervall)
 // quantile ein, die alle das Integral 1 / max_bins haben und speichert diese in dem Vektor "quantiles"
 void I2B::bins_erstellen()
 {
-    cout << "bins_erstellen geöffnet" << endl;
-
     // 1. Lambda aus vergleichsdaten schätzen
     double mean = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
     double lambda_hat = 1.0 / mean;
@@ -86,10 +86,9 @@ void I2B::bins_erstellen()
 
 }
 
+// Prüft, in welchem Quantil sich ein Intervall befindet
 int I2B::welcher_bin(double intervall)
 {
-    cout << "welcher_bin geöffnet" << endl;
-
     int index;
     if (intervall > quantile.back())
     {
@@ -106,7 +105,6 @@ int I2B::welcher_bin(double intervall)
 
 bool I2B::sigtest()
 {
-    cout << "sigtest geöffnet" << endl;
     double mean_base = std::accumulate(vergleichsdaten.begin(), vergleichsdaten.end(), 0.0) / vergleichsdaten.size();
     double mean_interv = std::accumulate(intervalle_post_vergleichsverteilung.begin(), intervalle_post_vergleichsverteilung.end(), 0.0) / intervalle_post_vergleichsverteilung.size();
 
@@ -139,6 +137,5 @@ int main()
 }
 
 // TODO:
-// WIE SOLLEN DIE BITS ZURÜCKGEGEBEN WERDEN
-// CODE AUF DEUTSCH SCHREIBEN
-// NAMEN DER VARIABLEN VERBESSERN
+// SIGNIFIKANZTEST MUSS NOCH ANGEPASST WERDEN
+
