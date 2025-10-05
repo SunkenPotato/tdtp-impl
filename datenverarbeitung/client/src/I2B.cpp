@@ -1,10 +1,20 @@
+#include <csignal>
+#include <cstdio>
 #include <iostream>
+#include <thread>
 #include <vector>
 #include <random>
 #include <cmath>
 #include <numeric>
 #include <algorithm>
+
+#include "../../include/libtdtp.h"
+
+#define MPSC_CHANNEL_SIZE 8192
+
 using namespace std;
+
+volatile sig_atomic_t keep_running = 1;
 
 class Intervall2Bin
 {
@@ -150,15 +160,100 @@ bool Intervall2Bin::t_test()
     return t > t_crit;
 }
 
+Intervall2Bin converter;
+IncomingDataPacket last_packet = 0;
+void *rx;
+
+// TODO(SunkenPotato, benemues): possibly add a limit on how many packets we're going to receive? maybe 8192?
+void listen_packets(int *result) {
+    IncomingDataPacket packet;
+
+    while (keep_running == 1) {
+        // if we don't have a packet, i.e., still waiting for one, or we're on the first run of the loop...
+        if (last_packet == 0) {
+            // ...then we just try receiving one. if there were none, it just won't write and last_packet
+            // will stay `0`, causing another rerun
+            if (c_client_channel_try_recv(&last_packet, rx) == 1) {
+                *result = 1;
+                c_free_client_receiver(rx);
+                break;
+            } else continue;
+
+        } else {
+            // try receiving a packet
+            int recv_res = c_client_channel_try_recv(&packet, rx);
+            // channel hung up
+            if (recv_res == 1) {
+                *result = 1;
+                // drop the receiver
+                c_free_client_receiver(rx);
+                return;
+            }
+            // no packets
+            else if (recv_res == 2) {
+                continue;
+            }
+
+            // the interval is merely the distance between the two
+            unsigned long long interval = packet - last_packet;
+            // set the last packet to the one we just received
+            last_packet = packet;
+
+            // uncomment the below to debug incoming intervals (useful since GPIO alerts with pigpio work whenever they feel like it)
+            //
+            // std::cout << "received packet, interval: " << interval << std::endl;
+
+            // FIXME(benemues): usually, the interval will fit in an `int`, despite being an
+            // `unsigned long long`, since even in non-radioactive spaces, we have
+            // a decent amount of radiation to send a packet about once every second
+            //
+            // this could cause possible bugs/UB in controlled environments however, so
+            // the converter should be modified to use `unsigned long long` instead of `unsigned int`.
+            converter.take_intervall(interval);
+        }
+    }
+}
+
+void signal_handler(int sig) {
+    keep_running = 0;
+    c_free_client_receiver(rx);
+}
+
 // Testanwendung
 int main()
 {
-    Intervall2Bin converter;
     std::vector<unsigned int> intervalle = {92542, 87573, 90436, 17405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
 
     for (int intervall : intervalle)
     {
         int bin = converter.take_intervall(intervall);
-        cout << bin << endl;
     }
+
+    signal(SIGINT, signal_handler);
+
+    ChannelPair pair = c_client_channel(MPSC_CHANNEL_SIZE);
+    rx = pair.rx;
+
+    // start a thread listening for packets, since c_data blocks this thread
+    int thread_res = 0;
+    std::thread packet_listener(listen_packets, &thread_res);
+
+    // connect to 127.0.0.1:25565
+    if (c_data(127, 0, 0, 1, 25565, pair.tx) != 0) {
+        perror("c_data");
+        return 1;
+    }
+
+    if (packet_listener.joinable()) packet_listener.join();
+
+    // TODO(SunkenPotato, benemues): process and display the received intervals.
+
+    if (thread_res != 0) {
+        std::cerr << "Packet handler thread returned an error" << std::endl;
+        return 1;
+    }
+
+    std::cout << "Exiting" << std::endl;
+
+    return 0;
 }
