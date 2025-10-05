@@ -86,14 +86,19 @@ pub fn server(
         match router(conn, addr, &supplier) {
             Ok(()) => info!("Closed connection to {addr}"),
             Err(e @ ServerError::ChannelTermination) => return Err(e),
-            Err(e) => {
-                error!("{addr} handler encoutered an error: {e}");
-                return Err(e);
-            }
+            Err(ServerError::IoError(io_err)) => match io_err.kind() {
+                ErrorKind::ConnectionReset
+                | ErrorKind::ConnectionAborted
+                | ErrorKind::ConnectionRefused
+                | ErrorKind::BrokenPipe => (),
+                _ => {
+                    return Err(ServerError::IoError(io_err));
+                }
+            },
         }
     }
 
-    unreachable!()
+    return Err(ServerError::IoError(io::Error::last_os_error()));
 }
 
 /// Route the incoming connection to a handler.
@@ -124,7 +129,7 @@ fn router(
             return Err(e);
         }
         Err(e @ ServerError::IoError(_)) => {
-            error!("Service encountered an I/O error: {e}");
+            error!("{addr} handler encountered an I/O error: {e}");
             return Err(e);
         }
     }
