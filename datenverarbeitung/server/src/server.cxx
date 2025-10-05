@@ -64,9 +64,10 @@ int main() {
     int res = 0;
 
     // register the GPIO alert function/handler
-    if (registerHandler() < 0) {
+    if (registerHandler() != 0) {
         std::cerr << "GPIO init failed" << std::endl;
         res = 1;
+        return 0;
     }
 
     // this will block, so no need to block with a `while`-loop.

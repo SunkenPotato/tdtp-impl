@@ -3,7 +3,7 @@ CXXFLAGS := -Wall -Wextra -std=c++20 -pthread
 
 BIN  	  := bin
 SRC  	  := src
-EXEC 	  := main
+EXEC 	  := main.a
 LIB       := ../lib
 INCLUDE   := ../include
 LIBRARIES := -lpigpio -lrt -ltdtp
