@@ -19,7 +19,7 @@ volatile sig_atomic_t keep_running = 1;
 class Intervall2Bin
 {
 public:
-    int take_intervall(unsigned int intervall);
+    void take_intervall(std::vector<int> &bit_liste, unsigned int intervall);
     Intervall2Bin()
     {
         // Anzahl der Bins, in die man die Exponentialverteilung einteilt
@@ -35,12 +35,11 @@ private:
     void bins_erstellen();
     int welcher_bin(double intervall);
     bool t_test();
-    const int NOT_READY = -1;                // Wird zurückgegeben, wenn noch nicht genug Informationen da sind
     int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der Vergleichsdaten
     std::vector<double> vergleichsdaten;     // Daten, um erwartete akute Zerfallsrate zu bestimmen
-    int vergleichsdaten_len = 3;             // Testwert, kann parametrisiert werden
+    int vergleichsdaten_len = 10000;         // Testwert, kann parametrisiert werden
     int max_bins;
-    int bin_nummer;
+    std::vector<int> aktuelle_bins;
     std::vector<double> quantile;
     std::vector<double> intervalle_post_vergleichsverteilung;
     int post_vergleichsdaten_zähler = 0;
@@ -49,8 +48,8 @@ private:
 // Nimmt Intervalle in Mikrosekunden, sammelt zunächst Vergleichsdaten,
 // lässt die Exponentialverteilung in gleichwahrscheinliche
 // Quantile einteilen und lässt prüfen, in welchem Quantil, also Bin, sich das Intervall, mit dem
-// diese Methode als letztes aufgerufen wurde, befindet und gibt die Nummer des Quantil zurück.
-int Intervall2Bin::take_intervall(unsigned int intervall)
+// diese Methode als letztes aufgerufen wurde, befindet und speichert diesem wert in bit_liste
+void Intervall2Bin::take_intervall(std::vector<int> &bin_liste, unsigned int intervall)
 {
     // Überprüfen, ob nciht genug Vergleichsdaten vorhanden
     if (referenz_zähler_vergleichsdaten < vergleichsdaten_len)
@@ -58,8 +57,6 @@ int Intervall2Bin::take_intervall(unsigned int intervall)
         // Vergleichsdaten das neue Intervall hinzufügen
         vergleichsdaten.push_back(intervall);
         referenz_zähler_vergleichsdaten++;
-        // Es können noch keine nützlichen Informationen zurückgegeben werden
-        return NOT_READY;
     }
     else
     {
@@ -70,11 +67,12 @@ int Intervall2Bin::take_intervall(unsigned int intervall)
         intervalle_post_vergleichsverteilung.push_back(intervall);
 
         // Lässt prüfen, in welchem Quantil sich das neue Intervall befindet
-        bin_nummer = welcher_bin(intervall);
+        aktuelle_bins.push_back(welcher_bin(intervall));
+
         post_vergleichsdaten_zähler++;
 
-        // Alle 10000 (lässt sich ändern) Intervalle nachdem die Vergleichsdaten lang genug sind
-        if (post_vergleichsdaten_zähler % 3 == 0)
+        // Alle 100 (lässt sich ändern) Intervalle nachdem die Vergleichsdaten lang genug sind
+        if (post_vergleichsdaten_zähler % 100 == 0)
         {
             // Ausführung eines Signifikanztests
             if (t_test())
@@ -84,12 +82,13 @@ int Intervall2Bin::take_intervall(unsigned int intervall)
                 quantile.clear();
                 intervalle_post_vergleichsverteilung.clear();
                 vergleichsdaten.clear();
-                return NOT_READY;
+                aktuelle_bins.clear();
+            }
+            else
+            {
+                bin_liste.insert(bin_liste.end(), aktuelle_bins.begin(), aktuelle_bins.end());
             }
         }
-
-        // Gibt das Quantil, in dem sich das neue Intervall befindet, zurück
-        return bin_nummer;
     }
 }
 
@@ -165,32 +164,41 @@ IncomingDataPacket last_packet = 0;
 void *rx;
 
 // TODO(SunkenPotato, benemues): possibly add a limit on how many packets we're going to receive? maybe 8192?
-void listen_packets(int *result) {
+void listen_packets(int *result)
+{
     IncomingDataPacket packet;
 
-    while (keep_running == 1) {
+    while (keep_running == 1)
+    {
         // if we don't have a packet, i.e., still waiting for one, or we're on the first run of the loop...
-        if (last_packet == 0) {
+        if (last_packet == 0)
+        {
             // ...then we just try receiving one. if there were none, it just won't write and last_packet
             // will stay `0`, causing another rerun
-            if (c_client_channel_try_recv(&last_packet, rx) == 1) {
+            if (c_client_channel_try_recv(&last_packet, rx) == 1)
+            {
                 *result = 1;
                 c_free_client_receiver(rx);
                 break;
-            } else continue;
-
-        } else {
+            }
+            else
+                continue;
+        }
+        else
+        {
             // try receiving a packet
             int recv_res = c_client_channel_try_recv(&packet, rx);
             // channel hung up
-            if (recv_res == 1) {
+            if (recv_res == 1)
+            {
                 *result = 1;
                 // drop the receiver
                 c_free_client_receiver(rx);
                 return;
             }
             // no packets
-            else if (recv_res == 2) {
+            else if (recv_res == 2)
+            {
                 continue;
             }
 
@@ -214,19 +222,22 @@ void listen_packets(int *result) {
     }
 }
 
-void signal_handler(int sig) {
+void signal_handler(int sig)
+{
     keep_running = 0;
     c_free_client_receiver(rx);
 }
 
-// Testanwendung
 int main()
 {
+    // Testanwendung
     std::vector<unsigned int> intervalle = {92542, 87573, 90436, 17405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
+
+    vector<int> testbins;
 
     for (int intervall : intervalle)
     {
-        int bin = converter.take_intervall(intervall);
+        converter.take_intervall(testbins, intervall);
     }
 
     signal(SIGINT, signal_handler);
@@ -239,16 +250,19 @@ int main()
     std::thread packet_listener(listen_packets, &thread_res);
 
     // connect to 127.0.0.1:25565
-    if (c_data(127, 0, 0, 1, 25565, pair.tx) != 0) {
+    if (c_data(127, 0, 0, 1, 25565, pair.tx) != 0)
+    {
         perror("c_data");
         return 1;
     }
 
-    if (packet_listener.joinable()) packet_listener.join();
+    if (packet_listener.joinable())
+        packet_listener.join();
 
     // TODO(SunkenPotato, benemues): process and display the received intervals.
 
-    if (thread_res != 0) {
+    if (thread_res != 0)
+    {
         std::cerr << "Packet handler thread returned an error" << std::endl;
         return 1;
     }
