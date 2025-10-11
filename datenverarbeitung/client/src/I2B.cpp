@@ -19,25 +19,26 @@ volatile sig_atomic_t keep_running = 1;
 class Intervall2Bin
 {
 public:
-    void take_intervall(std::vector<int> &bit_liste, unsigned int intervall);
-    Intervall2Bin()
+    std::vector<int> take_intervall(unsigned int intervall);
+    int batch_laenge = 1000; // Menge an Intervallen, die aufgenommen werden, bevor ein Signifikanztest ausgeführt wird
+    int vergleichsdaten_laenge = 10000;
+    Intervall2Bin(int batch_laenge, int vergleichsdaten_laenge) : batch_laenge(batch_laenge), vergleichsdaten_laenge(vergleichsdaten_laenge)
     {
         // Anzahl der Bins, in die man die Exponentialverteilung einteilt
-        max_bins = static_cast<int>(std::round(std::sqrt(vergleichsdaten_len))); // Sonst könnte man zu viel Information extrahieren, die eventuell nicht mehr zufällig ist
+        max_bins = static_cast<int>(std::round(std::sqrt(vergleichsdaten_laenge))); // Sonst könnte man zu viel Information extrahieren, die eventuell nicht mehr zufällig ist
 
         // Aus Effizienzgründen Speicher für die Vektoren reservieren.
         quantile.reserve(max_bins);
-        vergleichsdaten.reserve(vergleichsdaten_len);
-        intervalle_post_vergleichsverteilung.reserve(vergleichsdaten_len * 2); // Geschätzt, mehr macht keinen Sinn
+        vergleichsdaten.reserve(vergleichsdaten_laenge);
     }
 
 private:
+    int NOT_READY = -1; // Wird zurückgegeben, wenn noch das Programm noch nicht bereit ist (zB wenn die Vergleichsdaten nciht groß genug sind)
     void bins_erstellen();
     int welcher_bin(double intervall);
     bool t_test();
     int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der Vergleichsdaten
     std::vector<double> vergleichsdaten;     // Daten, um erwartete akute Zerfallsrate zu bestimmen
-    int vergleichsdaten_len = 10000;         // Testwert, kann parametrisiert werden
     int max_bins;
     std::vector<int> aktuelle_bins;
     std::vector<double> quantile;
@@ -49,10 +50,10 @@ private:
 // lässt die Exponentialverteilung in gleichwahrscheinliche
 // Quantile einteilen und lässt prüfen, in welchem Quantil, also Bin, sich das Intervall, mit dem
 // diese Methode als letztes aufgerufen wurde, befindet und speichert diesem wert in bit_liste
-void Intervall2Bin::take_intervall(std::vector<int> &bin_liste, unsigned int intervall)
+std::vector<int> Intervall2Bin::take_intervall(unsigned int intervall)
 {
     // Überprüfen, ob nciht genug Vergleichsdaten vorhanden
-    if (referenz_zähler_vergleichsdaten < vergleichsdaten_len)
+    if (referenz_zähler_vergleichsdaten < vergleichsdaten_laenge)
     {
         // Vergleichsdaten das neue Intervall hinzufügen
         vergleichsdaten.push_back(intervall);
@@ -71,8 +72,7 @@ void Intervall2Bin::take_intervall(std::vector<int> &bin_liste, unsigned int int
 
         post_vergleichsdaten_zähler++;
 
-        // Alle 100 (lässt sich ändern) Intervalle nachdem die Vergleichsdaten lang genug sind
-        if (post_vergleichsdaten_zähler % 100 == 0)
+        if (post_vergleichsdaten_zähler % batch_laenge == 0)
         {
             // Ausführung eines Signifikanztests
             if (t_test())
@@ -84,9 +84,8 @@ void Intervall2Bin::take_intervall(std::vector<int> &bin_liste, unsigned int int
                 vergleichsdaten.clear();
                 aktuelle_bins.clear();
             }
-            else
-            {
-                bin_liste.insert(bin_liste.end(), aktuelle_bins.begin(), aktuelle_bins.end());
+            else {
+                return aktuelle_bins;
             }
         }
     }
@@ -271,4 +270,3 @@ int main()
 
     return 0;
 }
-
