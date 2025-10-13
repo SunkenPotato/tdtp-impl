@@ -29,7 +29,9 @@ fn package_producer(tx: Arc<Sender<OutgoingDataPacket>>) {
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
-                .as_millis(),
+                .as_millis()
+                .try_into()
+                .unwrap(),
         )
         .unwrap();
 

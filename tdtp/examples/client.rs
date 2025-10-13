@@ -24,9 +24,7 @@ fn package_consumer(receiver: ClientReceiver) {
     while counter <= 512
         && let Ok(packet) = receiver.recv()
     {
-        // we match on ChannelDataPacket::Packet because it may also be a ChannelDataPacket::__Ping packet,
-        // which should not be handled
-        println!("Got a packet: {packet:?}");
         counter += 1;
+        println!("Got a packet: {packet:?}");
     }
 }

@@ -29,9 +29,9 @@ struct ChannelPair {
 };
 
 /// A packet to be sent, representing the amount of microseconds since the unix epoch.
-using OutgoingDataPacket = unsigned __int128;
+using OutgoingDataPacket = unsigned long long int;
 /// A received packet, representing the amount of microseconds since the unix epoch.
-using IncomingDataPacket = unsigned __int128;
+using IncomingDataPacket = unsigned long long int;
 
 extern "C" {
 
@@ -115,5 +115,16 @@ bool c_client_channel_recv(IncomingDataPacket *out, const void *receiver);
 /// # Safety
 /// `receiver` and `out` must be valid pointers.
 int32_t c_client_channel_try_recv(IncomingDataPacket *out, const void *receiver);
+
+/// Initialise a logging framework. This is meant for external callers who cannot instantiate a Rust logging framework.
+///
+/// `filter` must be one of, where each level is more verbose than the preceding one:
+/// - `0`: off
+/// - `1`: error
+/// - `2`: warn
+/// - `3`: info
+/// - `4`: debug
+/// - `5`: trace
+bool init_logger_framework(size_t filter);
 
 }  // extern "C"

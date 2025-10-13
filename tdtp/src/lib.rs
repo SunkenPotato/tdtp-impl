@@ -23,6 +23,8 @@ use std::{
     net::TcpStream,
 };
 
+#[cfg(feature = "interop")]
+use log::LevelFilter;
 use log::info;
 
 use crate::consts::SIG_EXIT;
@@ -55,10 +57,10 @@ pub struct ChannelPair {
 #[expect(clippy::missing_panics_doc)]
 #[expect(unsafe_code)]
 #[unsafe(no_mangle)]
-pub extern "C" fn init_logger_framework() {
+pub extern "C" fn init_logger_framework(fltr: LevelFilter) -> bool {
     use simplelog::{Config, SimpleLogger};
 
-    SimpleLogger::init(log::LevelFilter::Debug, Config::default()).unwrap();
+    SimpleLogger::init(fltr, Config::default()).is_ok()
 }
 
 pub mod client_mpsc {
