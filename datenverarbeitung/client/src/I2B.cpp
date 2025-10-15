@@ -1,16 +1,12 @@
 #include <csignal>
-#include <cstdio>
-#include <iostream>
-#include <thread>
+#include <mutex>
+#include <string>
 #include <vector>
-#include <random>
 #include <cmath>
 #include <numeric>
 #include <algorithm>
 
-#include "../../include/libtdtp.h"
-
-#define MPSC_CHANNEL_SIZE 8192
+#include "../../include/httplib.h"
 
 using namespace std;
 
@@ -20,8 +16,13 @@ class Intervall2Bin
 {
 public:
     std::vector<int> take_intervall(unsigned int intervall);
+    void fill_buffer(unsigned char *buf, int n);
     int batch_laenge = 1000; // Menge an Intervallen, die aufgenommen werden, bevor ein Signifikanztest ausgeführt wird
     int vergleichsdaten_laenge = 10000;
+    Intervall2Bin() : batch_laenge(1000), vergleichsdaten_laenge(10000) {
+        Intervall2Bin(batch_laenge, vergleichsdaten_laenge);
+    }
+
     Intervall2Bin(int batch_laenge, int vergleichsdaten_laenge) : batch_laenge(batch_laenge), vergleichsdaten_laenge(vergleichsdaten_laenge)
     {
         // Anzahl der Bins, in die man die Exponentialverteilung einteilt
@@ -158,73 +159,46 @@ bool Intervall2Bin::t_test()
     return t > t_crit;
 }
 
-Intervall2Bin converter;
-IncomingDataPacket last_packet = 0;
-void *rx;
-
-// TODO(SunkenPotato, benemues): possibly add a limit on how many packets we're going to receive? maybe 8192?
-void listen_packets(int *result)
-{
-    IncomingDataPacket packet;
-
-    while (keep_running == 1)
-    {
-        // if we don't have a packet, i.e., still waiting for one, or we're on the first run of the loop...
-        if (last_packet == 0)
-        {
-            // ...then we just try receiving one. if there were none, it just won't write and last_packet
-            // will stay `0`, causing another rerun
-            if (c_client_channel_try_recv(&last_packet, rx) == 1)
-            {
-                *result = 1;
-                c_free_client_receiver(rx);
-                break;
-            }
-            else
-                continue;
-        }
-        else
-        {
-            // try receiving a packet
-            int recv_res = c_client_channel_try_recv(&packet, rx);
-            // channel hung up
-            if (recv_res == 1)
-            {
-                *result = 1;
-                // drop the receiver
-                c_free_client_receiver(rx);
-                return;
-            }
-            // no packets
-            else if (recv_res == 2)
-            {
-                continue;
-            }
-
-            // the interval is merely the distance between the two
-            unsigned long long interval = packet - last_packet;
-            // set the last packet to the one we just received
-            last_packet = packet;
-
-            // uncomment the below to debug incoming intervals (useful since GPIO alerts with pigpio work whenever they feel like it)
-            //
-            // std::cout << "received packet, interval: " << interval << std::endl;
-
-            // FIXME(benemues): usually, the interval will fit in an `int`, despite being an
-            // `unsigned long long`, since even in non-radioactive spaces, we have
-            // a decent amount of radiation to send a packet about once every second
-            //
-            // this could cause possible bugs/UB in controlled environments however, so
-            // the converter should be modified to use `unsigned long long` instead of `unsigned int`.
-            converter.take_intervall(interval);
-        }
+void Intervall2Bin::fill_buffer(unsigned char *buf, int n) {
+    // TODO(SunkenPotato): actually fill this with random bytes.
+    for (int i = 0; i < n; i += 1) {
+        buf[i] = 0xCE;
     }
 }
 
-void signal_handler(int sig)
-{
-    keep_running = 0;
-    c_free_client_receiver(rx);
+std::mutex converter_mutex;
+Intervall2Bin converter;
+
+void initRoutes(httplib::Server &svr) {
+    svr.Get("/", [](const httplib::Request &req, httplib::Response &res) {
+        size_t n = 32;
+
+        if (req.has_param("amount")) {
+            try {
+                n = std::stoi(req.get_param_value("amount"));
+                if (n <= 0 || n >= 4096) n = 32;
+            } catch (...) {
+                n = 32;
+            }
+        } else {
+            res.status = 400;
+            res.set_content("Missing parameter 'amount'", "text/plain");
+            return;
+        }
+
+        unsigned char buffer[4096];
+        std::lock_guard<std::mutex> lock_guard(converter_mutex);
+        converter.fill_buffer(buffer, n);
+
+        std::string_view body(reinterpret_cast<const char*>(buffer), n);
+        res.set_content_provider(n, "application/octet-stream", [buffer](size_t offset, size_t len, httplib::DataSink &sink) {
+            sink.write(reinterpret_cast<const char*>(buffer + offset), len);
+            return true;
+        });
+        res.status = 200;
+
+        return;
+    });
 }
 
 int main()
@@ -232,41 +206,10 @@ int main()
     // Testanwendung
     std::vector<unsigned int> intervalle = {92542, 87573, 90436, 17405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
 
-    vector<int> testbins;
+    httplib::Server svr;
+    initRoutes(svr);
 
-    for (int intervall : intervalle)
-    {
-        converter.take_intervall(testbins, intervall);
-    }
-
-    signal(SIGINT, signal_handler);
-
-    ChannelPair pair = c_client_channel(MPSC_CHANNEL_SIZE);
-    rx = pair.rx;
-
-    // start a thread listening for packets, since c_data blocks this thread
-    int thread_res = 0;
-    std::thread packet_listener(listen_packets, &thread_res);
-
-    // connect to 127.0.0.1:25565
-    if (c_data(127, 0, 0, 1, 25565, pair.tx) != 0)
-    {
-        perror("c_data");
-        return 1;
-    }
-
-    if (packet_listener.joinable())
-        packet_listener.join();
-
-    // TODO(SunkenPotato, benemues): process and display the received intervals.
-
-    if (thread_res != 0)
-    {
-        std::cerr << "Packet handler thread returned an error" << std::endl;
-        return 1;
-    }
-
-    std::cout << "Exiting" << std::endl;
+    svr.listen("127.0.0.1", 8000);
 
     return 0;
 }

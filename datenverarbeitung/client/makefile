@@ -5,7 +5,7 @@ BIN       := bin
 SRC       := src
 LIB       := ../lib
 INCLUDE   := ../include
-LIBRARIES := -ltdtp
+LIBRARIES :=
 EXEC      := main.a
 
 all: $(BIN)/$(EXEC)
@@ -17,6 +17,7 @@ run: clean all
 
 $(BIN)/$(EXEC): $(SRC)/*.cpp
 	@echo "Building..."
+	if [ ! -d $(BIN) ]; then mkdir $(BIN); fi
 	$(CXX) $(CXXFLAGS) -I$(INCLUDE) -L$(LIB) $^ -o $@ $(LIBRARIES)
 
 clean:
