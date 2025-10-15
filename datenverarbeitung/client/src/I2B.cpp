@@ -22,33 +22,30 @@ std::chrono::time_point<std::chrono::high_resolution_clock> program_start;
 class Intervall2Bin
 {
 public:
+    Intervall2Bin(int batch_laenge, int max_quantiles)
+        : batch_laenge(batch_laenge),
+          max_quantiles(max_quantiles),
+          vergleichsdaten_laenge(max_quantiles * max_quantiles)
+    {
+        quantile.reserve(max_quantiles);
+        vergleichsdaten.reserve(vergleichsdaten_laenge);
+        NOT_READY.clear(); 
+    }
     std::vector<unsigned int> take_intervall(unsigned int intervall);
     void fill_buffer(unsigned char *buf, int n);
     int batch_laenge = 1000; // Menge an Intervallen, die aufgenommen werden, bevor ein Signifikanztest ausgeführt wird
-    int vergleichsdaten_laenge = 10000;
+    int max_quantiles;       // Maximale Anzahl an Quantilen, in die die Exp. Funktion eingeteilt wird 
     std::vector<unsigned int> aktuelle_bins;
-    Intervall2Bin() : batch_laenge(1000), vergleichsdaten_laenge(10000) {
-        Intervall2Bin(batch_laenge, vergleichsdaten_laenge);
-    }
-
-    Intervall2Bin(int batch_laenge, int vergleichsdaten_laenge) : batch_laenge(batch_laenge), vergleichsdaten_laenge(vergleichsdaten_laenge)
-    {
-        // Anzahl der Bins, in die man die Exponentialverteilung einteilt
-        max_bins = static_cast<int>(std::round(std::sqrt(vergleichsdaten_laenge))); // Sonst könnte man zu viel Information extrahieren, die eventuell nicht mehr zufällig ist
-
-        // Aus Effizienzgründen Speicher für die Vektoren reservieren.
-        quantile.reserve(max_bins);
-        vergleichsdaten.reserve(vergleichsdaten_laenge);
-    }
 
 private:
-    int NOT_READY = -1; // Wird zurückgegeben, wenn noch das Programm noch nicht bereit ist (zB wenn die Vergleichsdaten nciht groß genug sind)
     void bins_erstellen();
     unsigned int welcher_bin(double intervall);
     bool t_test();
     int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der Vergleichsdaten
     std::vector<double> vergleichsdaten;     // Daten, um erwartete akute Zerfallsrate zu bestimmen
-    int max_bins;
+    // Wird zurückgegeben, wenn noch das Programm noch nicht bereit ist (zB wenn die Vergleichsdaten nicht groß genug sind)
+    std::vector<unsigned int> NOT_READY; 
+    int vergleichsdaten_laenge;
     std::vector<double> quantile;
     std::vector<double> intervalle_post_vergleichsverteilung;
     int post_vergleichsdaten_zähler = 0;
@@ -61,12 +58,13 @@ private:
 std::vector<unsigned int> Intervall2Bin::take_intervall(unsigned int intervall)
 {
     std::cout << "take_intervall called" << std::endl;
-    // Überprüfen, ob nciht genug Vergleichsdaten vorhanden
+    // Überprüfen, ob genug Vergleichsdaten vorhanden
     if (referenz_zähler_vergleichsdaten < vergleichsdaten_laenge)
     {
         // Vergleichsdaten das neue Intervall hinzufügen
         vergleichsdaten.push_back(intervall);
         referenz_zähler_vergleichsdaten++;
+        return NOT_READY;
     }
     else
     {
@@ -92,17 +90,20 @@ std::vector<unsigned int> Intervall2Bin::take_intervall(unsigned int intervall)
                 intervalle_post_vergleichsverteilung.clear();
                 vergleichsdaten.clear();
                 aktuelle_bins.clear();
+                return NOT_READY;
             }
-            else {
+            else
+            {
                 return aktuelle_bins;
             }
         }
+        return NOT_READY;
     }
 }
 
 // Nimmt die Vergleichsdaten, schätzt damit das Lamda, also die Zerfallsrate der Dichtefunktion
-// der Exponentialfunktion, und teilt diese in "max_bins"
-// quantile ein, die alle das Integral 1 / max_bins haben und speichert diese in dem Vektor "quantiles"
+// der Exponentialfunktion, und teilt diese in "max_quantiles"
+// quantile ein, die alle das Integral 1 / max_quantiles haben und speichert diese in dem Vektor "quantiles"
 void Intervall2Bin::bins_erstellen()
 {
     // Lambda aus Vergleichsdaten schätzen
@@ -110,10 +111,10 @@ void Intervall2Bin::bins_erstellen()
     double lambda_hat = 1.0 / mean;
 
     // Quantile für gleichwahrscheinliche Bins
-    quantile.resize(max_bins);
-    for (int k = 1; k <= max_bins; ++k)
+    quantile.resize(max_quantiles);
+    for (int k = 1; k <= max_quantiles; ++k)
     {
-        double p = static_cast<double>(k) / max_bins; // p = k/n
+        double p = static_cast<double>(k) / max_quantiles; // p = k/n
         quantile[k - 1] = -std::log(1.0 - p) / lambda_hat;
     }
 }
@@ -126,7 +127,7 @@ unsigned int Intervall2Bin::welcher_bin(double intervall)
     // Wenn das Intervall größer als der Wert vom letzten Quantil ist, wird in index die Anzahl der Quantile - 1 gespeichert
     if (intervall > quantile.back())
     {
-        index = max_bins - 1;
+        index = max_quantiles - 1;
     }
     else
     {
@@ -167,9 +168,11 @@ bool Intervall2Bin::t_test()
     return t > t_crit;
 }
 
-void Intervall2Bin::fill_buffer(unsigned char *buf, int n) {
+void Intervall2Bin::fill_buffer(unsigned char *buf, int n)
+{
     // TODO(SunkenPotato): actually fill this with random bytes.
-    for (int i = 0; i < n; i += 1) {
+    for (int i = 0; i < n; i += 1)
+    {
         buf[i] = aktuelle_bins.back();
         aktuelle_bins.pop_back();
     }
@@ -178,8 +181,10 @@ void Intervall2Bin::fill_buffer(unsigned char *buf, int n) {
 std::mutex converter_mutex;
 Intervall2Bin converter;
 
-void initRoutes(httplib::Server &svr) {
-    svr.Get("/", [](const httplib::Request &req, httplib::Response &res) {
+void initRoutes(httplib::Server &svr)
+{
+    svr.Get("/", [](const httplib::Request &req, httplib::Response &res)
+            {
         size_t n = 32;
 
         if (req.has_param("amount")) {
@@ -212,19 +217,23 @@ void initRoutes(httplib::Server &svr) {
         });
         res.status = 200;
 
-        return;
-    });
+        return; });
 }
 
 std::optional<std::chrono::time_point<std::chrono::high_resolution_clock>> last_particle;
 
-void gpioHook(int gpio, int level, unsigned int tick) {
-    if (level == 0) {
+void gpioHook(int gpio, int level, unsigned int tick)
+{
+    if (level == 0)
+    {
         std::cout << "got a particle" << std::endl;
-        if (!last_particle) {
+        if (!last_particle)
+        {
             last_particle = std::chrono::high_resolution_clock::now();
             return;
-        } else {
+        }
+        else
+        {
             std::chrono::time_point now = std::chrono::high_resolution_clock::now();
             unsigned int interval = std::chrono::duration_cast<std::chrono::microseconds>(now - *last_particle).count();
             last_particle = now;
@@ -234,16 +243,20 @@ void gpioHook(int gpio, int level, unsigned int tick) {
     }
 }
 
-int initGpio() {
-    if (gpioInitialise() < 0) {
+int initGpio()
+{
+    if (gpioInitialise() < 0)
+    {
         std::cout << "Failed to call gpioInitialise" << std::endl;
         return 1;
     };
-    if (gpioSetMode(GPIO_PIN, PI_INPUT) != 0) {
+    if (gpioSetMode(GPIO_PIN, PI_INPUT) != 0)
+    {
         std::cout << "Failed to set input mode" << std::endl;
         return 2;
     }
-    if (gpioSetAlertFunc(GPIO_PIN, gpioHook) != 0) {
+    if (gpioSetAlertFunc(GPIO_PIN, gpioHook) != 0)
+    {
         std::cout << "Failed to set alert function" << std::endl;
         return 3;
     }
@@ -254,7 +267,8 @@ int initGpio() {
 int main()
 {
     program_start = std::chrono::high_resolution_clock::now();
-    if (initGpio() != 0) {
+    if (initGpio() != 0)
+    {
         std::cout << "Failed to initialise GPIO" << std::endl;
         gpioTerminate();
         return 1;
