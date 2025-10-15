@@ -1,24 +1,32 @@
 #include <csignal>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 #include <cmath>
 #include <numeric>
 #include <algorithm>
+#include <chrono>
 
+#include <pigpio.h>
 #include "../../include/httplib.h"
 
 using namespace std;
 
+#define GPIO_PIN 17
+
 volatile sig_atomic_t keep_running = 1;
+
+std::chrono::time_point<std::chrono::high_resolution_clock> program_start;
 
 class Intervall2Bin
 {
 public:
-    std::vector<int> take_intervall(unsigned int intervall);
+    std::vector<unsigned int> take_intervall(unsigned int intervall);
     void fill_buffer(unsigned char *buf, int n);
     int batch_laenge = 1000; // Menge an Intervallen, die aufgenommen werden, bevor ein Signifikanztest ausgeführt wird
     int vergleichsdaten_laenge = 10000;
+    std::vector<unsigned int> aktuelle_bins;
     Intervall2Bin() : batch_laenge(1000), vergleichsdaten_laenge(10000) {
         Intervall2Bin(batch_laenge, vergleichsdaten_laenge);
     }
@@ -36,12 +44,11 @@ public:
 private:
     int NOT_READY = -1; // Wird zurückgegeben, wenn noch das Programm noch nicht bereit ist (zB wenn die Vergleichsdaten nciht groß genug sind)
     void bins_erstellen();
-    int welcher_bin(double intervall);
+    unsigned int welcher_bin(double intervall);
     bool t_test();
     int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der Vergleichsdaten
     std::vector<double> vergleichsdaten;     // Daten, um erwartete akute Zerfallsrate zu bestimmen
     int max_bins;
-    std::vector<int> aktuelle_bins;
     std::vector<double> quantile;
     std::vector<double> intervalle_post_vergleichsverteilung;
     int post_vergleichsdaten_zähler = 0;
@@ -51,8 +58,9 @@ private:
 // lässt die Exponentialverteilung in gleichwahrscheinliche
 // Quantile einteilen und lässt prüfen, in welchem Quantil, also Bin, sich das Intervall, mit dem
 // diese Methode als letztes aufgerufen wurde, befindet und speichert diesem wert in bit_liste
-std::vector<int> Intervall2Bin::take_intervall(unsigned int intervall)
+std::vector<unsigned int> Intervall2Bin::take_intervall(unsigned int intervall)
 {
+    std::cout << "take_intervall called" << std::endl;
     // Überprüfen, ob nciht genug Vergleichsdaten vorhanden
     if (referenz_zähler_vergleichsdaten < vergleichsdaten_laenge)
     {
@@ -111,9 +119,9 @@ void Intervall2Bin::bins_erstellen()
 }
 
 // Prüft, in welchem Quantil sich ein Intervall befindet
-int Intervall2Bin::welcher_bin(double intervall)
+unsigned int Intervall2Bin::welcher_bin(double intervall)
 {
-    int index;
+    unsigned int index;
 
     // Wenn das Intervall größer als der Wert vom letzten Quantil ist, wird in index die Anzahl der Quantile - 1 gespeichert
     if (intervall > quantile.back())
@@ -162,7 +170,8 @@ bool Intervall2Bin::t_test()
 void Intervall2Bin::fill_buffer(unsigned char *buf, int n) {
     // TODO(SunkenPotato): actually fill this with random bytes.
     for (int i = 0; i < n; i += 1) {
-        buf[i] = 0xCE;
+        buf[i] = aktuelle_bins.back();
+        aktuelle_bins.pop_back();
     }
 }
 
@@ -188,6 +197,12 @@ void initRoutes(httplib::Server &svr) {
 
         unsigned char buffer[4096];
         std::lock_guard<std::mutex> lock_guard(converter_mutex);
+        if (converter.aktuelle_bins.size() < n) {
+            res.status = 503;
+            res.set_content("That amount of bytes is not available", "text/plain");
+            return;
+        }
+
         converter.fill_buffer(buffer, n);
 
         std::string_view body(reinterpret_cast<const char*>(buffer), n);
@@ -201,15 +216,54 @@ void initRoutes(httplib::Server &svr) {
     });
 }
 
+std::optional<std::chrono::time_point<std::chrono::high_resolution_clock>> last_particle;
+
+void gpioHook(int gpio, int level, unsigned int tick) {
+    if (level == 0) {
+        std::cout << "got a particle" << std::endl;
+        if (!last_particle) {
+            last_particle = std::chrono::high_resolution_clock::now();
+            return;
+        } else {
+            std::chrono::time_point now = std::chrono::high_resolution_clock::now();
+            unsigned int interval = std::chrono::duration_cast<std::chrono::microseconds>(now - *last_particle).count();
+            last_particle = now;
+            std::lock_guard guard(converter_mutex);
+            converter.take_intervall(interval);
+        }
+    }
+}
+
+int initGpio() {
+    if (gpioInitialise() < 0) {
+        std::cout << "Failed to call gpioInitialise" << std::endl;
+        return 1;
+    };
+    if (gpioSetMode(GPIO_PIN, PI_INPUT) != 0) {
+        std::cout << "Failed to set input mode" << std::endl;
+        return 2;
+    }
+    if (gpioSetAlertFunc(GPIO_PIN, gpioHook) != 0) {
+        std::cout << "Failed to set alert function" << std::endl;
+        return 3;
+    }
+
+    return 0;
+}
+
 int main()
 {
-    // Testanwendung
-    std::vector<unsigned int> intervalle = {92542, 87573, 90436, 17405, 12543, 76548, 89534, 65873, 17634, 78254, 90234, 15762, 87498};
-
+    program_start = std::chrono::high_resolution_clock::now();
+    if (initGpio() != 0) {
+        std::cout << "Failed to initialise GPIO" << std::endl;
+        gpioTerminate();
+        return 1;
+    }
     httplib::Server svr;
     initRoutes(svr);
 
     svr.listen("127.0.0.1", 8000);
 
+    gpioTerminate();
     return 0;
 }

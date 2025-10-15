@@ -9,6 +9,6 @@ def sig(a, b, c):
 
 pi = pigpio.pi()
 
-pi.callback(17, func=sig)
+pi.callback(11, func=sig)
 
 while True: pass

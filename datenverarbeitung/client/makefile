@@ -5,7 +5,7 @@ BIN       := bin
 SRC       := src
 LIB       := ../lib
 INCLUDE   := ../include
-LIBRARIES :=
+LIBRARIES := -lpigpio -lrt
 EXEC      := main.a
 
 all: $(BIN)/$(EXEC)
