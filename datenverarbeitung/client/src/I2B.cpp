@@ -42,12 +42,12 @@ private:
     unsigned int welcher_bin(double intervall);
     bool t_test();
     int referenz_zähler_vergleichsdaten = 0; // Iterator für Länge der Vergleichsdaten
-    std::vector<double> vergleichsdaten;     // Daten, um erwartete akute Zerfallsrate zu bestimmen
+    std::vector<unsigned int> vergleichsdaten;     // Daten, um erwartete akute Zerfallsrate zu bestimmen
     // Wird zurückgegeben, wenn noch das Programm noch nicht bereit ist (zB wenn die Vergleichsdaten nicht groß genug sind)
     std::vector<unsigned int> NOT_READY; 
     int vergleichsdaten_laenge;
-    std::vector<double> quantile;
-    std::vector<double> intervalle_post_vergleichsverteilung;
+    std::vector<unsigned int> quantile;
+    std::vector<unsigned int> intervalle_post_vergleichsverteilung;
     int post_vergleichsdaten_zähler = 0;
 };
 
